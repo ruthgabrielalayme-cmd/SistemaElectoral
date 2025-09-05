@@ -82,12 +82,19 @@ h2 {
 }
 
 /* Agrupador para input y select */
-.select-group {
-  display: flex;
-  flex-direction: column;
-  padding: 0 0.5rem;
-  align-items: center; /* centra inputs */
-}
+.select-group,
+  label,
+  input[type="text"],
+  input[type="number"],
+  input[type="file"],
+  .select-group select,
+  .input-icon-wrapper input[type="text"] {
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
 
 /* Etiquetas */
 label {
@@ -142,7 +149,6 @@ input[type="file"]:focus,
   cursor: pointer;
 }
 
-/* Tabla votos */
 .tablaVotos table {
   width: 100%;
   border-collapse: collapse;
@@ -157,16 +163,35 @@ input[type="file"]:focus,
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  user-select: none;
 }
 
 .tablaVotos td {
   border: 1px solid #ccc;
-  padding: 8px 10px;
+  padding: 6px 8px;
   text-align: center;
   color: #1C3978;
   font-weight: 600;
 }
+
+.tablaVotos td input[type="number"] {
+  width: 80px;
+  height: 32px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* Responsivo: en pantallas pequeñas */
+@media (max-width: 600px) {
+  .tablaVotos td input[type="number"] {
+    width: 100%;
+    font-size: 0.85rem;
+  }
+}
+
+
 
 /* Totales: dos columnas en escritorio, 1 en móvil */
 .totales {
@@ -257,10 +282,10 @@ input[type="file"]:focus,
     padding: 0.65rem 0;
   }
 
-  /* Totales se vuelve una columna */
+  /* Totales se vuelve una columna 
   .totales {
     grid-template-columns: 1fr;
-  }
+  }*/
   
 
   .form {
@@ -269,11 +294,6 @@ input[type="file"]:focus,
     gap: 0.75rem;
   }
 
-  .columnas {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
 }
 
 .seccionBoletas {

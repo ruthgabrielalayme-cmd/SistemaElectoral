@@ -9,8 +9,8 @@ const firebaseConfig = {
   projectId: "control-electoral-libre",
   storageBucket: "control-electoral-libre.firebasestorage.app",
   messagingSenderId: "593332831012",
-  appId: "1:593332831012:web:f03121ee8be81134b9a9b1",
-  measurementId: "G-E01WW9NVH8"
+  appId: "1:593332831012:web:67a021420cb8b5efb9a9b1",
+  measurementId: "G-E5GV00BWD8"
 };
 
 

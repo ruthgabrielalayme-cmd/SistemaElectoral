@@ -9,7 +9,7 @@ const partidosInfo = [
   { nombre: 'ALIANZA POPULAR (AP)', acronimo: 'ap', colores: ['#5BA5D6'] },
   { nombre: 'LIBERTAD Y PROGRESO ADN (LYP-ADN)', acronimo: 'adn', colores: ['#D9042B'] },
   { nombre: 'AUTONOMÍA PARA BOLIVIA SÚMATE (APB-SUMATE)', acronimo: 'sumate', colores: ['#410A59'] },
-  { nombre: 'LIBERTAD Y DEMOCRACIA (LIBRE)', acronimo: 'libre', colores: ['#1D3973'] },
+  { nombre: 'LIBERTAD Y DEMOCRACIA (LIBRE)', acronimo: 'libre', colores: ['#BE0A2D'] },
   { nombre: 'LA FUERZA DEL PUEBLO (FP)', acronimo: 'fp', colores: ['#52C5F2'] },
   { nombre: 'MAS-IPSP', acronimo: 'mas', colores: ['#0B2447'] },
   { nombre: 'MORENA', acronimo: 'morena', colores: ['#F20587'] },

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   collection,
@@ -7,6 +8,8 @@ import {
   getDoc,
   setDoc,
   deleteDoc,
+  query,
+  where,
 } from 'firebase/firestore';
 import { getAuth, createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
 import { db, auth, firebaseConfig } from '../firebaseConfig';
@@ -15,6 +18,10 @@ import Swal from 'sweetalert2';
 import UsuarioCard from '../UsuarioCard';
 import { useNavigate } from 'react-router-dom';
 import styles from './GestionUsuariosPage.module.css';
+import * as XLSX from 'xlsx';
+import GenerarQRDelegado from './GenerarQRDelegado';
+import JefesFaltantes from './JefesFaltantes';
+
 
 export default function GestionUsuariosPage() {
   const auth = getAuth();
@@ -29,6 +36,66 @@ export default function GestionUsuariosPage() {
   // Estados de filtros
   const [filtroRecinto, setFiltroRecinto] = useState('');
   const [filtroCelular, setFiltroCelular] = useState('');
+  const [filtroNombre, setFiltroNombre] = useState('');
+  const [filtroCorreo, setFiltroCorreo] = useState('');
+
+  //estado para la visualizacion de carga
+  const [procesando, setProcesando] = useState(false);
+  const [progreso, setProgreso] = useState(0);
+
+  //estados para la paginacion
+  const [paginaSolicitudes, setPaginaSolicitudes] = React.useState(1);
+  const [paginaHabilitados, setPaginaHabilitados] = React.useState(1);
+  const [paginaInhabilitados, setPaginaInhabilitados] = React.useState(1);
+
+  const ITEMS_POR_PAGINA = 6;
+
+  const paginar = (lista, pagina) => {
+    const inicio = (pagina - 1) * ITEMS_POR_PAGINA;
+    return lista.slice(inicio, inicio + ITEMS_POR_PAGINA);
+  };
+
+  const filtrarUsuarios = (usuarios) => {
+    const recintoFiltro = filtroRecinto.trim().toLowerCase();
+    const celularFiltro = filtroCelular.trim().toLowerCase();
+    const nombreFiltro = filtroNombre.trim().toLowerCase();
+    const correoFiltro = filtroCorreo.trim().toLowerCase();
+
+    return usuarios.filter((u) => {
+      const recinto = (u.recintoNombre || '').trim().toLowerCase();
+      const celular = (u.celular || '').trim().toLowerCase();
+      const nombre = ((u.nombre || '') + ' ' + (u.apellido || '')).trim().toLowerCase();
+      const correo = (u.email || '').trim().toLowerCase();
+
+      const coincideRecinto = recintoFiltro === '' || recinto.includes(recintoFiltro);
+      const coincideCelular = celularFiltro === '' || celular.includes(celularFiltro);
+      const coincideNombre = nombreFiltro === '' || nombre.includes(nombreFiltro);
+      const coincideCorreo = correoFiltro === '' || correo.includes(correoFiltro);
+
+      return coincideRecinto && coincideCelular && coincideNombre && coincideCorreo;
+    });
+  };
+
+  const solicitudesFiltradas = filtrarUsuarios(usuariosPendientes);
+  const solicitudesPaginadas = paginar(solicitudesFiltradas, paginaSolicitudes);
+
+  const habilitadosFiltrados = filtrarUsuarios(
+    usuariosHabilitados.filter((u) => u.rol !== 'inhabilitado' && u.habilitado === true)
+  );
+  const habilitadosPaginados = paginar(habilitadosFiltrados, paginaHabilitados);
+
+  const inhabilitadosFiltrados = filtrarUsuarios(
+    usuariosHabilitados.filter((u) => u.rol === 'inhabilitado' && u.habilitado === false)
+  );
+  const inhabilitadosPaginados = paginar(inhabilitadosFiltrados, paginaInhabilitados);
+
+  React.useEffect(() => {
+    setPaginaSolicitudes(1);
+    setPaginaHabilitados(1);
+    setPaginaInhabilitados(1);
+  }, [filtroRecinto, filtroCelular, filtroNombre, filtroCorreo]);
+
+
 
   // Cargar usuario actual y redirigir si no tiene permiso
   useEffect(() => {
@@ -51,45 +118,6 @@ export default function GestionUsuariosPage() {
     };
     cargarDatosUsuario();
   }, [navigate, auth]);
-
-  // Cargar pendientes de colección 'solicitudes' y habilitados de 'usuarios'
-  const cargarUsuarios = async () => {
-    if (!usuarioActual) return;
-    setLoading(true);
-
-    const solicitudesSnap = await getDocs(collection(db, 'solicitudes'));
-    const usuariosSnap = await getDocs(collection(db, 'usuarios'));
-
-    const solicitudes = solicitudesSnap.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    const usuarios = usuariosSnap.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    if (usuarioActual.rol === 'administrador') {
-      setUsuariosPendientes(solicitudes);
-      setUsuariosHabilitados(usuarios.filter((u) => u.habilitado));
-    } else if (usuarioActual.rol === 'jefe_recinto') {
-      const recintoId = usuarioActual.recintoId;
-      setUsuariosPendientes(
-        solicitudes.filter((u) => u.recintoId === recintoId)
-      );
-      setUsuariosHabilitados(
-        usuarios.filter((u) => u.habilitado && u.recintoId === recintoId)
-      );
-    }
-
-    setLoading(false);
-  };
-
-
-  useEffect(() => {
-    if (usuarioActual) cargarUsuarios();
-  }, [usuarioActual]);
 
   const cambiarRolUsuario = async (usuario) => {
     const { value: nuevoRol } = await Swal.fire({
@@ -123,7 +151,7 @@ export default function GestionUsuariosPage() {
   };
 
 
-
+  // 📌 Función para habilitar usuario
   const habilitarUsuario = async (usuario) => {
     let rolSeleccionado = 'delegado';
 
@@ -147,7 +175,7 @@ export default function GestionUsuariosPage() {
     } else {
       const confirm = await Swal.fire({
         title: '¿Estás seguro?',
-        text: `Vas a habilitar a ${usuario.nombre} con rol "delegado" y contraseña su número celular.`,
+        text: `Vas a habilitar a ${usuario.nombre} con rol "delegado".`,
         icon: 'question',
         showCancelButton: true,
         confirmButtonText: 'Sí, habilitar',
@@ -158,122 +186,215 @@ export default function GestionUsuariosPage() {
     }
 
     try {
-      // Crear app secundaria para crear usuario sin cerrar sesión del admin
-      const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
-      const secondaryAuth = getAuth(secondaryApp);
+      if (usuario.id && usuario.rol === 'inhabilitado') {
+        // ✅ Usuario ya existe → solo actualizar
+        await updateDoc(doc(db, 'usuarios', usuario.id), {
+          rol: rolSeleccionado,
+          habilitado: true,
+        });
 
-      const cred = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        usuario.email,
-        usuario.celular
-      );
+        Swal.fire(
+          'Usuario habilitado',
+          `Se actualizó el rol a "${rolSeleccionado}"`,
+          'success'
+        );
+      } else {
+        // 🆕 Usuario viene de 'solicitudes' → se debe crear
+        const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
+        const secondaryAuth = getAuth(secondaryApp);
 
-      const nuevoUID = cred.user.uid;
+        const cred = await createUserWithEmailAndPassword(
+          secondaryAuth,
+          usuario.email,
+          usuario.celular
+        );
 
-      const datosUsuario = {
-        ...usuario,
-        rol: rolSeleccionado,
-        habilitado: true,
-      };
-      delete datosUsuario.id;
+        const nuevoUID = cred.user.uid;
 
-      await setDoc(doc(db, 'usuarios', nuevoUID), datosUsuario);
-      await deleteDoc(doc(db, 'solicitudes', usuario.id));
+        const datosUsuario = {
+          ...usuario,
+          rol: rolSeleccionado,
+          habilitado: true,
+        };
+        delete datosUsuario.id;
 
-      // Cerrar sesión del usuario creado para mantener activo al admin
-      await secondaryAuth.signOut();
-      // Liberar recursos
-      secondaryApp.delete?.();
+        await setDoc(doc(db, 'usuarios', nuevoUID), datosUsuario);
+        await deleteDoc(doc(db, 'solicitudes', usuario.id));
 
-      Swal.fire(
-        '¡Usuario habilitado!',
-        `Se ha creado su cuenta y asignado rol "${rolSeleccionado}".`,
-        'success'
-      );
+        await secondaryAuth.signOut();
+        secondaryApp.delete?.();
 
+        Swal.fire(
+          '¡Usuario habilitado!',
+          `Se creó la cuenta y se asignó rol "${rolSeleccionado}"`,
+          'success'
+        );
+      }
+
+      cargarUsuarios();
+    } catch (error) {
+      console.error("Error habilitando usuario:", error);
+
+      // 📌 Usar diccionario de errores
+      const mensajeError = erroresFirebase[error.code] || erroresFirebase.default;
+
+      Swal.fire("Error", mensajeError, "error");
+    }
+  };
+
+  const inhabilitarUsuario = async (usuario) => {
+    const confirm = await Swal.fire({
+      title: '¿Inhabilitar usuario?',
+      text: `Vas a inhabilitar a ${usuario.nombre}. Ya no podrá ingresar al sistema.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, inhabilitar',
+      cancelButtonText: 'Cancelar',
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      await updateDoc(doc(db, 'usuarios', usuario.id), {
+        habilitado: false,
+        rol: 'inhabilitado',
+      });
+
+      Swal.fire('Inhabilitado', 'El usuario ha sido inhabilitado.', 'success');
       cargarUsuarios();
     } catch (error) {
       Swal.fire('Error', error.message, 'error');
     }
   };
 
+  // 
 
-  // Filtro combinado por recinto y celular
-  const filtrarUsuarios = (usuarios) => {
-    const recintoFiltro = filtroRecinto.trim().toLowerCase();
-    const celularFiltro = filtroCelular.trim().toLowerCase();
 
-    return usuarios.filter((u) => {
-      const recinto = (u.recintoNombre || '').trim().toLowerCase();
-      const celular = (u.celular || '').trim().toLowerCase();
+  const usuariosTodos = usuariosHabilitados;
+  const usuariosHabilitadosActivos = usuariosTodos.filter(
+    (u) => u.rol !== 'inhabilitado' && u.habilitado === true
+  );
+  const usuariosInhabilitados = usuariosTodos.filter(
+    (u) => u.rol === 'inhabilitado' && u.habilitado === false
+  );
 
-      const coincideRecinto =
-        recintoFiltro === '' || recinto.includes(recintoFiltro);
-      const coincideCelular =
-        celularFiltro === '' || celular.includes(celularFiltro);
 
-      return coincideRecinto && coincideCelular;
-    });
-  };
+  // En el renderizado dentro del return:
 
   return (
     <div className={styles.container}>
-      <h2>Filtro por recinto electoral y celular</h2>
-      <div className={styles.filtros}>
-        <input
-          type="text"
-          placeholder="Filtrar por recinto electoral"
-          value={filtroRecinto}
-          onChange={(e) => setFiltroRecinto(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Filtrar por número de celular"
-          value={filtroCelular}
-          onChange={(e) => setFiltroCelular(e.target.value)}
-        />
-      </div>
-
-      <h2>Solicitudes Pendientes</h2>
-      {loading ? (
-        <p className={styles.mensaje}>Cargando...</p>
-      ) : filtrarUsuarios(usuariosPendientes).length === 0 ? (
-        <p className={styles.mensaje}>No hay solicitudes pendientes con ese filtro</p>
-      ) : (
-        <div className={styles.listaUsuarios}>
-          {filtrarUsuarios(usuariosPendientes).map((u) => (
-            <UsuarioCard
-              key={u.id}
-              usuario={u}
-              puedeHabilitar
-              onHabilitar={habilitarUsuario}
-            />
-          ))}
+      {usuarioActual && (usuarioActual.rol === 'administrador' || usuarioActual.rol === 'revisor') ? (
+        // 🔹 Solo columna derecha (antes estaba dentro de layoutDosColumnas)
+        <div className={styles.columnaDerecha}>
+          <JefesFaltantes />
         </div>
-      )}
-
-      <hr className={styles.separador} />
-
-      <h2>Usuarios Habilitados</h2>
-      {loading ? (
-        <p className={styles.mensaje}>Cargando...</p>
-      ) : filtrarUsuarios(usuariosHabilitados).length === 0 ? (
-        <p className={styles.mensaje}>No hay usuarios habilitados con ese filtro</p>
       ) : (
-        <div className={styles.listaUsuarios}>
-          {filtrarUsuarios(usuariosHabilitados).map((u) => (
-            <UsuarioCard
-              key={u.id}
-              usuario={u}
-              onCambiarRol={
-                usuarioActual.rol === 'administrador' ? cambiarRolUsuario : null
-              }
+        // 🔹 Si no es admin ni revisor, mantengo lo que ya estaba en versión 1 columna
+        <>
+          {usuarioActual?.rol === 'administrador' && (
+            <div className={styles.cargaExcel}>
+              {/* ... mismo código de carga Excel */}
+            </div>
+          )}
+
+          <div>
+            {usuarioActual &&
+              (usuarioActual.rol === 'jefe_recinto' || usuarioActual.rol === 'administrador') && (
+                <GenerarQRDelegado uid={auth.currentUser.uid} />
+              )}
+          </div>
+
+          {/* filtros */}
+          <h2>Filtro por recinto electoral y celular</h2>
+          <div className={styles.filtros}>
+            <input
+              type="text"
+              placeholder="Filtrar por recinto electoral"
+              value={filtroRecinto}
+              onChange={(e) => setFiltroRecinto(e.target.value)}
             />
-          ))}
-        </div>
+            <input
+              type="text"
+              placeholder="Filtrar por número de celular"
+              value={filtroCelular}
+              onChange={(e) => setFiltroCelular(e.target.value)}
+            />
+          </div>
+
+          {/* solicitudes pendientes */}
+          <h2>Solicitudes Pendientes</h2>
+          {loading ? (
+            <p className={styles.mensaje}>Cargando...</p>
+          ) : filtrarUsuarios(usuariosPendientes).length === 0 ? (
+            <p className={styles.mensaje}>No hay solicitudes pendientes con ese filtro</p>
+          ) : (
+            <div className={styles.listaUsuarios}>
+              {filtrarUsuarios(usuariosPendientes).map((u) => (
+                <UsuarioCard
+                  key={u.id}
+                  usuario={u}
+                  puedeHabilitar
+                  onHabilitar={habilitarUsuario}
+                />
+              ))}
+            </div>
+          )}
+
+          <hr className={styles.separador} />
+
+          {/* usuarios habilitados */}
+          <h2>Usuarios Habilitados Activos</h2>
+          {loading ? (
+            <p className={styles.mensaje}>Cargando...</p>
+          ) : filtrarUsuarios(usuariosHabilitadosActivos).length === 0 ? (
+            <p className={styles.mensaje}>No hay usuarios habilitados con ese filtro</p>
+          ) : (
+            <div className={styles.listaUsuarios}>
+              {filtrarUsuarios(usuariosHabilitadosActivos).map((u) => (
+                <UsuarioCard
+                  key={u.id}
+                  usuario={u}
+                  onCambiarRol={usuarioActual.rol === 'administrador' ? cambiarRolUsuario : null}
+                  onInhabilitar={usuarioActual.rol === 'administrador' ? inhabilitarUsuario : null}
+                  esAdmin={usuarioActual.rol === 'administrador'}
+                />
+              ))}
+            </div>
+          )}
+
+          <hr className={styles.separador} />
+
+          {/* usuarios inhabilitados */}
+          <h2>Usuarios Inhabilitados</h2>
+          {loading ? (
+            <p className={styles.mensaje}>Cargando...</p>
+          ) : (() => {
+            const inhabilitados = usuariosHabilitados.filter(
+              (u) => u.rol === 'inhabilitado' && u.habilitado === false
+            );
+            const filtrados = filtrarUsuarios(inhabilitados);
+
+            return filtrados.length === 0 ? (
+              <p className={styles.mensaje}>No hay usuarios inhabilitados con ese filtro</p>
+            ) : (
+              <div className={styles.listaUsuarios}>
+                {filtrados.map((u) => (
+                  <UsuarioCard
+                    key={u.id}
+                    usuario={u}
+                    puedeHabilitar={true}
+                    onHabilitar={habilitarUsuario}
+                    esAdmin={usuarioActual.rol === 'administrador'}
+                  />
+                ))}
+              </div>
+            );
+          })()}
+        </>
       )}
     </div>
   );
+
 }
 
 

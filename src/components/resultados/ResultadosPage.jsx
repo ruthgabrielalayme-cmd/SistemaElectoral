@@ -26,7 +26,7 @@ export default function ResultadosPage() {
         const data = docSnap.data();
         setUsuarioActual(data);
 
-        if (data.rol !== 'administrador') {
+        if (data.rol !== 'administrador' && data.rol !== 'revisor') {
           navigate('/');
         }
       } else {

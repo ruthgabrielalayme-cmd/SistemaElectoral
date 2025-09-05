@@ -14,6 +14,8 @@ import {
 import Swal from 'sweetalert2';
 import Loader from './Loader';
 import styles from './CrearUsuarioPage.module.css';
+import * as XLSX from 'xlsx';
+
 
 export default function CrearUsuarioPage() {
   const [form, setForm] = useState({
@@ -79,6 +81,72 @@ export default function CrearUsuarioPage() {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
   };
+
+  const procesarExcel = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(worksheet);
+
+    const secondaryApp = initializeApp(firebaseConfig, 'SecondaryApp');
+    const secondaryAuth = getAuth(secondaryApp);
+
+    const errores = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        const cred = await createUserWithEmailAndPassword(
+          secondaryAuth,
+          row.email,
+          row.celular.toString()
+        );
+
+        const nuevoUID = cred.user.uid;
+
+        const usuarioData = {
+          nombre: row.nombre,
+          email: row.email,
+          celular: row.celular.toString(),
+          departamento: row.departamentoId,
+          circunscripcion: row.circunscripcionId,
+          provincia: row.provinciaId,
+          municipio: row.municipioId,
+          recintoId: row.recintoId,
+          recintoNombre: row.recintoNombre || '',
+          rol: 'jefe_recinto',
+          habilitado: true,
+        };
+
+        await setDoc(doc(db, 'usuarios', nuevoUID), usuarioData);
+      } catch (error) {
+        errores.push({ fila: i + 2, error: error.message }); // fila +2 porque la 1 es encabezado
+      }
+    }
+
+    await secondaryAuth.signOut();
+    secondaryApp.delete?.();
+
+    if (errores.length > 0) {
+      Swal.fire({
+        title: 'Carga finalizada con errores',
+        html: errores
+          .map((e) => `Fila ${e.fila}: ${e.error}`)
+          .join('<br/>'),
+        icon: 'warning',
+        width: 600,
+      });
+    } else {
+      Swal.fire('Éxito', 'Todos los usuarios fueron habilitados correctamente.', 'success');
+    }
+
+    cargarUsuarios();
+  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,18 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, addDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import styles from './SignupPage.module.css';
 import Swal from 'sweetalert2';
-
 
 export default function SolicitarAccesoPage() {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [celular, setCelular] = useState('');
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -23,125 +21,94 @@ export default function SolicitarAccesoPage() {
     recinto: '',
   });
 
-  const [departamentos, setDepartamentos] = useState([]);
-  const [circunscripciones, setCircunscripciones] = useState([]);
-  const [provincias, setProvincias] = useState([]);
-  const [municipios, setMunicipios] = useState([]);
+  const [departamentoNombre, setDepartamentoNombre] = useState('');
+  const [circunscripcionNombre, setCircunscripcionNombre] = useState('');
+  const [provinciaNombre, setProvinciaNombre] = useState('');
+  const [municipioNombre, setMunicipioNombre] = useState('');
+
   const [recintos, setRecintos] = useState([]);
-
-  const [busquedaCirc, setBusquedaCirc] = useState('');
-  const [busquedaProv, setBusquedaProv] = useState('');
-  const [busquedaMuni, setBusquedaMuni] = useState('');
   const [busquedaRecinto, setBusquedaRecinto] = useState('');
+  const [sugerencias, setSugerencias] = useState([]);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
-  const circunscripcionesFiltradas = circunscripciones.filter(c =>
-    c.nombre.toLowerCase().includes(busquedaCirc.toLowerCase())
-  );
-  const provinciasFiltradas = provincias.filter(p =>
-    p.nombre.toLowerCase().includes(busquedaProv.toLowerCase())
-  );
-  const municipiosFiltrados = municipios.filter(m =>
-    m.nombre.toLowerCase().includes(busquedaMuni.toLowerCase())
-  );
-  const recintosFiltrados = recintos.filter(r =>
-    r.nombre.toLowerCase().includes(busquedaRecinto.toLowerCase())
-  );
-
+  // Cargar recintos al inicio
   useEffect(() => {
-    const cargarDepartamentos = async () => {
-      const snap = await getDocs(collection(db, 'departamentos'));
-      setDepartamentos(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    };
-    cargarDepartamentos();
-  }, []);
-
-  useEffect(() => {
-    if (!form.departamento) return;
-    const cargar = async () => {
-      const q = query(collection(db, 'circunscripciones'), where('idDepartamento', '==', form.departamento));
-      const snap = await getDocs(q);
-      setCircunscripciones(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    };
-    cargar();
-  }, [form.departamento]);
-
-  useEffect(() => {
-    if (!form.circunscripcion) return;
-    const cargar = async () => {
-      const q = query(collection(db, 'provincias'), where('idCircunscripcion', '==', form.circunscripcion));
-      const snap = await getDocs(q);
-      setProvincias(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    };
-    cargar();
-  }, [form.circunscripcion]);
-
-  useEffect(() => {
-    if (!form.provincia) return;
-    const cargar = async () => {
-      const q = query(collection(db, 'municipios'), where('idProvincia', '==', form.provincia));
-      const snap = await getDocs(q);
-      setMunicipios(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    };
-    cargar();
-  }, [form.provincia]);
-
-  useEffect(() => {
-    if (!form.municipio) return;
-    const cargar = async () => {
-      const q = query(collection(db, 'recintos'), where('idMunicipio', '==', form.municipio));
-      const snap = await getDocs(q);
+    const cargarRecintos = async () => {
+      const snap = await getDocs(collection(db, 'recintos'));
       setRecintos(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     };
-    cargar();
-  }, [form.municipio]);
-////funcion para subir la solicitud
+    cargarRecintos();
+  }, []);
+
+  // Filtrar sugerencias
+  useEffect(() => {
+    if (busquedaRecinto.trim() === '') {
+      setSugerencias([]);
+      return;
+    }
+    const filtrados = recintos.filter(r =>
+      r.nombre.toLowerCase().includes(busquedaRecinto.toLowerCase())
+    );
+    setSugerencias(filtrados);
+  }, [busquedaRecinto, recintos]);
+
+  // Seleccionar un recinto
+  const seleccionarRecinto = async (recinto) => {
+    setBusquedaRecinto(recinto.nombre);
+    setMostrarSugerencias(false);
+
+    const recintoSnap = await getDoc(doc(db, "recintos", recinto.id));
+    if (!recintoSnap.exists()) return;
+    const recintoData = recintoSnap.data();
+
+    const municipioSnap = await getDoc(doc(db, "municipios", recintoData.idMunicipio));
+    const municipioData = municipioSnap.data();
+
+    const provinciaSnap = await getDoc(doc(db, "provincias", municipioData.idProvincia));
+    const provinciaData = provinciaSnap.data();
+
+    const circSnap = await getDoc(doc(db, "circunscripciones", provinciaData.idCircunscripcion));
+    const circData = circSnap.data();
+
+    const deptoSnap = await getDoc(doc(db, "departamentos", circData.idDepartamento));
+    const deptoData = deptoSnap.data();
+
+    setForm({
+      recinto: recinto.id,
+      municipio: recintoData.idMunicipio,
+      provincia: municipioData.idProvincia,
+      circunscripcion: provinciaData.idCircunscripcion,
+      departamento: circData.idDepartamento
+    });
+
+    setDepartamentoNombre(deptoData.nombre);
+    setCircunscripcionNombre(circData.nombre);
+    setProvinciaNombre(provinciaData.nombre);
+    setMunicipioNombre(municipioData.nombre);
+  };
+
+  // Enviar formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // Validar duplicado en solicitudes
-      const solicitudesQuery = query(
-        collection(db, 'solicitudes'),
-        where('email', '==', email)
-      );
+      const solicitudesQuery = query(collection(db, 'solicitudes'), where('email', '==', email));
       const solicitudesSnap = await getDocs(solicitudesQuery);
-
       if (!solicitudesSnap.empty) {
-        await Swal.fire({
-          icon: 'warning',
-          title: 'Correo duplicado',
-          text: 'Ya existe una solicitud pendiente con este correo.',
-        });
+        await Swal.fire({ icon: 'warning', title: 'Correo duplicado', text: 'Ya existe una solicitud pendiente con este correo.' });
         setLoading(false);
         return;
       }
 
-      // Validar duplicado en usuarios habilitados
-      const usuariosQuery = query(
-        collection(db, 'usuarios'),
-        where('email', '==', email)
-      );
+      const usuariosQuery = query(collection(db, 'usuarios'), where('email', '==', email));
       const usuariosSnap = await getDocs(usuariosQuery);
-
       if (!usuariosSnap.empty) {
-        await Swal.fire({
-          icon: 'warning',
-          title: 'Correo en uso',
-          text: 'Este correo ya está registrado como usuario habilitado.',
-        });
+        await Swal.fire({ icon: 'warning', title: 'Correo en uso', text: 'Este correo ya está registrado como usuario habilitado.' });
         setLoading(false);
         return;
       }
 
-      // Obtener nombres por ID
-      const departamentoNombre = departamentos.find(d => d.id === form.departamento)?.nombre || '';
-      const circunscripcionNombre = circunscripciones.find(c => c.id === form.circunscripcion)?.nombre || '';
-      const provinciaNombre = provincias.find(p => p.id === form.provincia)?.nombre || '';
-      const municipioNombre = municipios.find(m => m.id === form.municipio)?.nombre || '';
-      const recintoNombre = recintos.find(r => r.id === form.recinto)?.nombre || '';
-
-      // Enviar solicitud
       await addDoc(collection(db, 'solicitudes'), {
         nombre,
         email,
@@ -155,36 +122,22 @@ export default function SolicitarAccesoPage() {
         municipioId: form.municipio,
         municipioNombre,
         recintoId: form.recinto,
-        recintoNombre,
+        recintoNombre: busquedaRecinto,
         rol: 'pendiente',
         habilitado: false,
         fechaSolicitud: serverTimestamp(),
       });
 
-      await Swal.fire({
-        icon: 'success',
-        title: 'Solicitud enviada',
-        text: 'Espera la aprobación del administrador.',
-      });
+      await Swal.fire({ icon: 'success', title: 'Solicitud enviada', text: 'Espera la aprobación del administrador.' });
 
-      // Limpiar formulario
       setNombre('');
       setEmail('');
       setCelular('');
-      setForm({
-        departamento: '',
-        circunscripcion: '',
-        provincia: '',
-        municipio: '',
-        recinto: '',
-      });
+      setBusquedaRecinto('');
+      setForm({ departamento: '', circunscripcion: '', provincia: '', municipio: '', recinto: '' });
 
     } catch (err) {
-      await Swal.fire({
-        icon: 'error',
-        title: 'Error al enviar',
-        text: err.message,
-      });
+      await Swal.fire({ icon: 'error', title: 'Error al enviar', text: err.message });
     } finally {
       setLoading(false);
     }
@@ -194,6 +147,44 @@ export default function SolicitarAccesoPage() {
     <div className={styles.signupContainer}>
       <h2>Solicitar Acceso</h2>
       <form onSubmit={handleSubmit} className={styles.form}>
+
+        {/* Buscador tipo Google */}
+        <label>Buscar recinto</label>
+        <input
+          type="text"
+          value={busquedaRecinto}
+          onChange={(e) => {
+            setBusquedaRecinto(e.target.value);
+            setMostrarSugerencias(true);
+          }}
+          placeholder="Escribe el nombre del recinto"
+          onBlur={() => setTimeout(() => setMostrarSugerencias(false), 200)}
+          onFocus={() => setMostrarSugerencias(true)}
+        />
+        {mostrarSugerencias && sugerencias.length > 0 && (
+          <ul className={styles.sugerenciasLista}>
+            {sugerencias.map((r) => (
+              <li key={r.id} onClick={() => seleccionarRecinto(r)}>
+                {r.nombre}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Campos autocompletados */}
+        <label>Departamento</label>
+        <input type="text" value={departamentoNombre} disabled />
+
+        <label>Circunscripcion</label>
+        <input type="text" value={circunscripcionNombre} disabled />
+
+        <label>Provincia</label>
+        <input type="text" value={provinciaNombre} disabled />
+
+        <label>Municipio</label>
+        <input type="text" value={municipioNombre} disabled />
+
+        {/* Datos personales */}
         <label>Nombre completo</label>
         <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
 
@@ -203,72 +194,6 @@ export default function SolicitarAccesoPage() {
         <label>Número de celular</label>
         <input type="tel" value={celular} onChange={(e) => setCelular(e.target.value)} required />
 
-        <label>Departamento</label>
-        <select
-          value={form.departamento}
-          onChange={(e) => setForm({ ...form, departamento: e.target.value, circunscripcion: '', provincia: '', municipio: '', recinto: '' })}
-          required
-        >
-          <option value="">Seleccione un departamento</option>
-          {departamentos.map((d) => (
-            <option key={d.id} value={d.id}>{d.nombre}</option>
-          ))}
-        </select>
-
-        <label>Buscar circunscripción</label>
-        <input type="text" value={busquedaCirc} onChange={(e) => setBusquedaCirc(e.target.value)} />
-        <select
-          value={form.circunscripcion}
-          onChange={(e) => setForm({ ...form, circunscripcion: e.target.value, provincia: '', municipio: '', recinto: '' })}
-          required
-        >
-          <option value="">Seleccione una circunscripción</option>
-          {circunscripcionesFiltradas.map(c => (
-            <option key={c.id} value={c.id}>{c.nombre}</option>
-          ))}
-        </select>
-
-        <label>Buscar provincia</label>
-        <input type="text" value={busquedaProv} onChange={(e) => setBusquedaProv(e.target.value)} />
-        <select
-          value={form.provincia}
-          onChange={(e) => setForm({ ...form, provincia: e.target.value, municipio: '', recinto: '' })}
-          required
-        >
-          <option value="">Seleccione una provincia</option>
-          {provinciasFiltradas.map(p => (
-            <option key={p.id} value={p.id}>{p.nombre}</option>
-          ))}
-        </select>
-
-        <label>Buscar municipio</label>
-        <input type="text" value={busquedaMuni} onChange={(e) => setBusquedaMuni(e.target.value)} />
-        <select
-          value={form.municipio}
-          onChange={(e) => setForm({ ...form, municipio: e.target.value, recinto: '' })}
-          required
-        >
-          <option value="">Seleccione un municipio</option>
-          {municipiosFiltrados.map(m => (
-            <option key={m.id} value={m.id}>{m.nombre}</option>
-          ))}
-        </select>
-
-        <label>Buscar recinto</label>
-        <input type="text" value={busquedaRecinto} onChange={(e) => setBusquedaRecinto(e.target.value)} />
-        <select
-          value={form.recinto}
-          onChange={(e) => setForm({ ...form, recinto: e.target.value })}
-          required
-        >
-          <option value="">Seleccione un recinto</option>
-          {recintosFiltrados.map(r => (
-            <option key={r.id} value={r.id}>{r.nombre}</option>
-          ))}
-        </select>
-
-        {error && <p className={styles.error}>{error}</p>}
-        {successMsg && <p className={styles.success}>{successMsg}</p>}
         <p style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#555' }}>
           Si no conoces alguno de estos datos, puedes consultar en{' '}
           <a href="https://yoparticipo.oep.org.bo/" target="_blank" rel="noopener noreferrer" style={{ color: '#155FBF', textDecoration: 'underline' }}>
@@ -283,6 +208,7 @@ export default function SolicitarAccesoPage() {
     </div>
   );
 }
+
 
 
 

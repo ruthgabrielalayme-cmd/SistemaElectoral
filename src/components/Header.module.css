@@ -222,6 +222,26 @@
   font-weight: 700;
 }
 
+/* Botón restablecer contraseña */
+.menuUsuario .BtnReset {
+  background-color: var(--azul-medio) !important;
+  color: white !important;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.menuUsuario .BtnReset:hover:not(:disabled) {
+  background-color: var(--azul-oscuro) !important;
+}
+
 /* RESPONSIVO */
 @media screen and (max-width: 768px) {
   .hamburguesa {
@@ -289,6 +309,11 @@
 
   .BtnSalir {
     font-size: 0.95rem;
+  }
+
+  .menuUsuario .BtnReset {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.6rem;
   }
 }
 

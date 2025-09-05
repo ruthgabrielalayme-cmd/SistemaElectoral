@@ -3,6 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { auth, db } from './firebaseConfig'; // incluye también 'db' para obtener datos del usuario
 import { doc, getDoc } from 'firebase/firestore';
 import styles from './Header.module.css';
+import { sendPasswordResetEmail } from "firebase/auth";
+import Swal from 'sweetalert2';
+
+
 
 export default function Header() {
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -27,7 +31,7 @@ export default function Header() {
       }
 
       const path = window.location.pathname;
-      if (!currentUser && !path.startsWith('/login') && !path.startsWith('/signup')) {
+      if (!currentUser && !path.startsWith('/login') && !path.startsWith('/signup') && !path.startsWith('/jefesR/registro-delegado')) {
         navigate('/login');
       }
     });
@@ -90,6 +94,10 @@ export default function Header() {
         </a>
 
         <Link to="/" onClick={cerrarMenu}>Inicio</Link>
+        {/* Solo administradores ven esta opción */}
+        {userData?.rol === 'administrador' && (
+          <Link to="/gestionRecintos" onClick={cerrarMenu}>Gestión de Recintos</Link>
+        )}
         <Link to="/delegado/registro_electoral" onClick={cerrarMenu}>Registro Electoral</Link>
         <Link to="/revisor/registros_cargados" onClick={cerrarMenu}>Revisor</Link>
         <Link to="/jefesR/GestionUsuariosPage" onClick={cerrarMenu}>Gestión de cuentas</Link>
@@ -106,6 +114,7 @@ export default function Header() {
               {user.email?.charAt(0).toUpperCase()}
             </div>
 
+
             {menuUsuarioAbierto && (
               <div className={styles.menuUsuario}>
                 <div className={styles.usuarioInfo}>
@@ -113,6 +122,46 @@ export default function Header() {
                   {userData?.rol && <div>Rol: {userData.rol}</div>}
                   {userData?.recintoNombre && <div>Recinto: {userData.recintoNombre}</div>}
                 </div>
+
+                {/* Botón para restablecer contraseña */}
+                <button
+                  onClick={async () => {
+                    const result = await Swal.fire({
+                      title: '¿Restablecer contraseña?',
+                      html: `El enlace se enviará a:<br><strong>${user.email}</strong>`,
+                      icon: 'question',
+                      showCancelButton: true,
+                      confirmButtonText: 'Sí, enviar',
+                      cancelButtonText: 'Cancelar',
+                      confirmButtonColor: '#155FBF',
+                      cancelButtonColor: '#d33'
+                    });
+
+                    if (!result.isConfirmed) return;
+
+                    try {
+                      await sendPasswordResetEmail(auth, user.email);
+                      Swal.fire({
+                        icon: 'success',
+                        title: 'Enlace enviado',
+                        text: `Se ha enviado un enlace de restablecimiento a ${user.email}`,
+                        confirmButtonColor: '#155FBF'
+                      });
+                    } catch (error) {
+                      Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: error.message,
+                        confirmButtonColor: '#155FBF'
+                      });
+                    }
+                  }}
+                  className={styles.BtnReset}
+                >
+                  Restablecer contraseña
+                </button>
+
+                {/* Botón de salir */}
                 <button onClick={handleLogout} className={styles.BtnSalir}>
                   Salir
                 </button>

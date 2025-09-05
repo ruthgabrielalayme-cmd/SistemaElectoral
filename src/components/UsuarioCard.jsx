@@ -5,12 +5,12 @@ export default function UsuarioCard({
   usuario,
   onHabilitar,
   puedeHabilitar = false,
-  onCambiarRol = null
+  onCambiarRol = null,
+  onInhabilitar = null,
+  onEliminarSolicitud = null,
+  esAdmin = false
 }) {
-  // Clase para el color de fondo/etiqueta según rol
   const rolClass = usuario.rol ? styles[`rol_${usuario.rol.toLowerCase()}`] : '';
-
-  // Capitalizar la primera letra del rol
   const rolCapitalizado = usuario.rol
     ? usuario.rol.charAt(0).toUpperCase() + usuario.rol.slice(1)
     : 'No asignado';
@@ -33,18 +33,45 @@ export default function UsuarioCard({
         </p>
       </div>
 
-      {puedeHabilitar && (
-        <button onClick={() => onHabilitar(usuario)} className={styles.button}>
-          Habilitar
-        </button>
-      )}
+      <div className={styles.acciones}>
+        {puedeHabilitar && (
+          <button
+            onClick={() => onHabilitar(usuario)}
+            className={styles.buttonSecundario}
+          >
+            Habilitar
+          </button>
+        )}
 
-      {onCambiarRol && (
-        <button onClick={() => onCambiarRol(usuario)} className={styles.buttonSecundario}>
-          Cambiar rol
-        </button>
-      )}
+        {onCambiarRol && (
+          <button
+            onClick={() => onCambiarRol(usuario)}
+            className={styles.buttonSecundario}
+          >
+            Cambiar rol
+          </button>
+        )}
+
+        {esAdmin && onInhabilitar && (
+          <button
+            onClick={() => onInhabilitar(usuario)}
+            className={styles.buttonInhabilitar}
+          >
+            Inhabilitar
+          </button>
+        )}
+
+        {onEliminarSolicitud && (
+          <button
+            onClick={() => onEliminarSolicitud(usuario)}
+            className={styles.buttonEliminar}
+          >
+            Eliminar solicitud
+          </button>
+        )}
+      </div>
     </div>
   );
 }
+
 

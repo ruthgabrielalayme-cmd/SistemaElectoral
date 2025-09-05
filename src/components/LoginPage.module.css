@@ -8,28 +8,33 @@
 
 .mainContainer {
   display: flex;
-  height: 100vh;
+  min-height: 100vh;
+  /* Mejor que height para móviles */
   width: 100%;
   font-family: 'Segoe UI', sans-serif;
   overflow: hidden;
   min-width: 320px;
+  /* flex-wrap eliminado para escritorio */
 }
 
 /* IZQUIERDA: Carrusel */
 .leftSection {
-  flex: 1;
+  width: 50%;
+  /* fijo en escritorio */
   position: relative;
   overflow: hidden;
   min-width: 0;
   background-color: var(--azul-oscuro);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Overlay con desenfoque y gradiente */
 .bgOverlay {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(to top, rgba(29, 57, 115, 0.85), rgba(21, 95, 191, 0.3));
+  inset: 0;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.3));
   backdrop-filter: blur(3px);
   z-index: 8;
 }
@@ -37,28 +42,32 @@
 /* Imágenes del carrusel */
 .bgCarousel {
   position: absolute;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .bgCarousel img {
   position: absolute;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   object-fit: cover;
   opacity: 0;
   transition: opacity 1s ease-in-out;
-  top: 0;
-  left: 0;
   transform: scale(1);
   animation: zoomInOut 15s ease-in-out infinite;
+  width: 100%;
+  height: 100%;
 }
 
 @keyframes zoomInOut {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.05);
   }
@@ -68,53 +77,50 @@
   opacity: 1;
 }
 
-/* Texto del carrusel */
-.carouselText {
+/* Indicadores (dots) del carrusel */
+.dotsContainer {
   position: absolute;
-  bottom: 2rem;
-  left: 2rem;
-  z-index: 20;
-  color: white;
-  background: rgba(29, 57, 115, 0.8); /* azul oscuro semi transparente */
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  max-width: 85%;
-  word-wrap: break-word;
-  box-shadow: 0 0 8px var(--azul-medio);
+  bottom: 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  z-index: 30;
 }
 
-.carouselText h2 {
-  margin: 0 0 0.5rem;
-  color: white;
-  font-size: 1.5rem;
-  opacity: 0;
-  animation: fadeText 1s ease-in-out forwards;
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.5);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
-.carouselText p {
-  margin: 0;
-  font-size: 1rem;
-  opacity: 0;
-  animation: fadeText 1s ease-in-out forwards;
+.dot:hover,
+.dot:focus {
+  background-color: rgba(255, 255, 255, 0.8);
+  outline: none;
 }
 
-@keyframes fadeText {
-  to {
-    opacity: 1;
-  }
+.dotActive {
+  background-color: white;
 }
 
 /* DERECHA: Login */
 .rightSection {
-  flex: 1;
+  width: 50%;
+  /* fijo en escritorio */
   position: relative;
-  background-color: var(--azul-oscuro2);
+  background-color: white;
   display: flex;
   justify-content: center;
   align-items: center;
   overflow: hidden;
   padding: 2rem;
   min-width: 0;
+  height: auto;
 }
 
 .authContainer {
@@ -127,7 +133,7 @@
   width: 100%;
   box-sizing: border-box;
   box-shadow: 0 8px 25px rgba(21, 95, 191, 0.5);
-  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 .logo img {
@@ -142,8 +148,8 @@
   margin-bottom: 1.5rem;
   font-size: 1.4rem;
   color: var(--azul-oscuro);
-  word-wrap: break-word;
   font-weight: 700;
+  word-wrap: break-word;
 }
 
 .formField {
@@ -167,8 +173,9 @@
   border: 1px solid var(--azul-medio);
   border-radius: 6px;
   font-size: 1rem;
-  outline: none;
-  transition: border-color 0.3s;
+  outline-offset: 2px;
+  outline-color: transparent;
+  transition: border-color 0.3s ease, outline-color 0.3s ease;
   box-sizing: border-box;
   min-width: 0;
   color: var(--azul-oscuro2);
@@ -180,6 +187,7 @@
 
 .formField input:focus {
   border-color: var(--rojo-fuerte);
+  outline-color: var(--rojo-fuerte);
 }
 
 .authBtn {
@@ -188,16 +196,19 @@
   background-color: var(--rojo-fuerte);
   color: white;
   font-size: 1rem;
-  font-weight: bold;
+  font-weight: 700;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.3s ease;
   box-sizing: border-box;
+  user-select: none;
 }
 
-.authBtn:hover:not(:disabled) {
+.authBtn:hover:not(:disabled),
+.authBtn:focus-visible {
   background-color: var(--rojo-claro);
+  outline: none;
 }
 
 .authBtn:disabled {
@@ -213,46 +224,86 @@
   text-decoration: none;
   font-size: 0.95rem;
   word-wrap: break-word;
+  user-select: none;
 }
 
-.authLink:hover {
+.authLink:hover,
+.authLink:focus-visible {
   text-decoration: underline;
+  outline: none;
+}
+
+.resetLinkBtn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 1rem;
+  background: none;
+  border: none;
+  color: var(--azul-medio);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.resetLinkBtn:hover,
+.resetLinkBtn:focus-visible {
+  color: var(--rojo-fuerte);
+  outline: none;
+}
+
+
+/* Animación shake para errores */
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+
+#error-message {
+  animation: shake 0.3s;
 }
 
 /* RESPONSIVE */
 @media (max-width: 900px) {
   .mainContainer {
+    flex-wrap: wrap;
     flex-direction: column;
     height: auto;
     min-height: 100vh;
+    overflow: visible;
   }
 
   .leftSection,
   .rightSection {
-    flex: none;
     width: 100%;
-    height: 50vh;
+    /* Ocupan todo el ancho */
+    height: auto;
+    /* Altura flexible */
     min-height: 300px;
   }
 
-  .carouselText {
-    bottom: 1rem;
-    left: 1rem;
-    padding: 0.75rem 1rem;
-    max-width: 95%;
-    font-size: 0.9rem;
-  }
-
-  .carouselText h2 {
-    font-size: 1.2rem;
-  }
-
-  .carouselText p {
-    font-size: 0.8rem;
+  .dotsContainer {
+    bottom: 10px;
   }
 
   .authContainer {
-    max-width: 95%;
+    max-width: 80%;
     margin: 1rem auto;
     padding: 2rem 1.5rem;
     border-radius: 8px;
@@ -272,29 +323,6 @@
   }
 }
 
-@media (max-width: 400px) {
-  .authContainer {
-    padding: 1.5rem 1rem;
-  }
-
-  .formField input {
-    padding-left: 2rem;
-  }
-}
-
-/* Animación fade-in para texto con color blanco fijo */
-.fadeIn {
-  opacity: 0;
-  animation: fadeText 1s ease-in-out forwards;
-  color: white;
-}
-
-@keyframes fadeText {
-  to {
-    opacity: 1;
-  }
-}
-
 @media (max-width: 600px) {
   .mainContainer {
     flex-direction: column;
@@ -310,18 +338,19 @@
   }
 
   .authContainer {
-    width: 100%;
+    width: 80%;
     max-width: 400px;
     margin: 0 auto;
     box-sizing: border-box;
   }
 }
 
+@media (max-width: 400px) {
+  .authContainer {
+    padding: 1.5rem 1rem;
+  }
 
-
-
-
-
-
-
-
+  .formField input {
+    padding-left: 2rem;
+  }
+}

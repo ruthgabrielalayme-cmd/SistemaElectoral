@@ -35,7 +35,18 @@ export default function TestUploadExcel() {
       const workbook = XLSX.read(data, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const json = XLSX.utils.sheet_to_json(sheet);
-      setExcelData(json);
+
+      // LIMPIAR LAS CLAVES DE CADA FILA
+      const cleanJson = json.map((row) => {
+        const cleanRow = {};
+        for (const key in row) {
+          const trimmedKey = key.trim();
+          cleanRow[trimmedKey] = row[key];
+        }
+        return cleanRow;
+      });
+
+      setExcelData(cleanJson);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -64,8 +75,8 @@ export default function TestUploadExcel() {
         const recNom = row['Recinto']?.trim() || '';
         const nroMesa = row['Numero de Mesa'] ? String(row['Numero de Mesa']).trim() : '';
         const codMesa = row['mesa'] ? String(row['mesa']).trim() : '';
-        const habilitados = row['Habilitados'] || 0;
-        const inhabilitados = row['Inhabilitados'] || 0;
+        const habilitados = Number(row['Habilitados']) || 0;
+        const inhabilitados = Number(row['Inhabilitados']) || 0;
 
         if (!depCod || !depNom || !provCod || !provNom || !muniNom || !recNom || !nroMesa) continue;
 
@@ -118,7 +129,7 @@ export default function TestUploadExcel() {
           cache.municipios.set(`${muniNom}-${provId}`, muniId);
         }
 
-        // 5. Recinto (incluye zona/distrito)
+        // 5. Recinto (zona/distrito embebidos)
         let recintoId = cache.recintos.get(`${recCod}-${muniId}`);
         if (!recintoId) {
           recintoId = await obtenerIdUnico('recintos', 'codigo', recCod, 'idMunicipio', muniId);
@@ -154,7 +165,7 @@ export default function TestUploadExcel() {
           cache.mesas.add(mesaKey);
         }
 
-        // Actualizar progreso
+        // Progreso
         setProgreso({ actual: i + 1, total: excelData.length });
       }
 
@@ -194,8 +205,7 @@ export default function TestUploadExcel() {
         <div>
           <Loader />
           <p style={{ marginTop: '1rem' }}>
-            Subiendo {progreso.actual} de {progreso.total} registros...
-            {' '}
+            Subiendo {progreso.actual} de {progreso.total} registros...{' '}
             {((progreso.actual / progreso.total) * 100).toFixed(1)}%
           </p>
         </div>
@@ -203,5 +213,6 @@ export default function TestUploadExcel() {
     </div>
   );
 }
+
 
 

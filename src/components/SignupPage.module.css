@@ -31,11 +31,12 @@ input {
   border: 1.8px solid #ccc;
   border-radius: 8px;
   outline: none;
-  transition: border-color 0.3s ease;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 input:focus {
   border-color: #007bff;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
 }
 
 .error {
@@ -98,8 +99,34 @@ select:focus {
 
 select:valid {
   border-color: #007bff;
-  background-color: #f0f8ff; /* Azul muy claro para resaltar que ya se seleccionó algo */
+  background-color: #f0f8ff;
   font-weight: 600;
   color: #222;
 }
 
+/* 📌 Estilos para buscador tipo Google */
+.sugerenciasLista {
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  position: absolute;
+  width: calc(100% - 2rem);
+  z-index: 999;
+  list-style: none;
+  margin-top: -0.5rem;
+  padding: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.sugerenciasLista li {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.sugerenciasLista li:hover {
+  background-color: #f0f8ff;
+}

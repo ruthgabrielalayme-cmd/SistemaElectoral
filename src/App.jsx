@@ -1,5 +1,7 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { auth, db } from './components/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
@@ -15,53 +17,120 @@ import StressTestPage from './components/StressTestPage';
 import RevisorPage from './components/revisor/RevisoresPage';
 import JefeRPage from './components/jefesR/GestionUsuariosPage';
 import ResultadosPage from './components/resultados/ResultadosPage';
+import RegistroDelegadoQR from './components/jefesR/RegistroDelegadoQR';
+import GestionRecintos from './components/administrador/GestionRecintosPage';
 
+// -------------------- Componente de Ruta Privada --------------------
+function PrivateRoute({ children, allowedRoles = [], userData }) {
+  if (!userData) return <Loader />; // mientras carga
 
-function Home() {
-  return (
-    <>
-      <HeroSection />
-    </>
-  );
+  if (allowedRoles.length > 0 && !allowedRoles.includes(userData.rol)) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
 }
 
-function AppContent() {
+// -------------------- Home --------------------
+function Home() {
+  return <HeroSection />;
+}
+
+// -------------------- Contenido de la App --------------------
+function AppContent({ userData }) {
   const location = useLocation();
-  const [loading, setLoading] = useState(false);
+  const [loadingPage, setLoadingPage] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
-    // Simulamos carga de página con delay, ajusta si conectas con fetch o Firebase
-    const timer = setTimeout(() => setLoading(false), 300);
+    setLoadingPage(true);
+    const timer = setTimeout(() => setLoadingPage(false), 300);
     return () => clearTimeout(timer);
   }, [location]);
 
-  if (loading) return <Loader />;
+  if (loadingPage) return <Loader />;
 
   return (
     <Routes>
+      {/* Páginas públicas */}
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
-      <Route path="/delegado/registro_electoral" element={<RegistroBoletasPage />} />
-      <Route path="/revisor/registros_cargados" element={<RevisorPage />} />
-      <Route path="/resultados/resultados_graficos" element={<ResultadosPage />} />
-      <Route path="/jefesR/GestionUsuariosPage" element={<JefeRPage />} />
-      <Route path="/test" element={<Test />} />
-      <Route path="/testv1" element={<TestUploadExcelv1 />} />
-      <Route path="/testv2" element={<TestUploadExcelv2 />} />
-      <Route path="/testEstres" element={<StressTestPage />} />
 
+      {/* Delegado */}
+      <Route path="/delegado/registro_electoral" element={<RegistroBoletasPage />} />
+
+      {/* Revisor */}
+      <Route path="/revisor/registros_cargados" element={<RevisorPage />} />
+
+      {/* Resultados */}
+      <Route path="/resultados/resultados_graficos" element={<ResultadosPage />} />
+
+      {/* Jefe de recintos */}
+      <Route path="/jefesR/GestionUsuariosPage" element={<JefeRPage />} />
+      <Route path="/jefesR/registro-delegado/:uid" element={<RegistroDelegadoQR />} />
+
+      {/* Rutas privadas (solo administradores) */}
+      <Route 
+        path="/test" 
+        element={
+          <PrivateRoute allowedRoles={['administrador']} userData={userData}>
+            <Test />
+          </PrivateRoute>
+        } 
+      />
+      <Route 
+        path="/testv1" 
+        element={
+          <PrivateRoute allowedRoles={['administrador']} userData={userData}>
+            <TestUploadExcelv1 />
+          </PrivateRoute>
+        } 
+      />
+      <Route 
+        path="/testv2" 
+        element={
+          <PrivateRoute allowedRoles={['administrador']} userData={userData}>
+            <TestUploadExcelv2 />
+          </PrivateRoute>
+        } 
+      />
+      <Route 
+        path="/gestionRecintos" 
+        element={
+          <PrivateRoute allowedRoles={['administrador']} userData={userData}>
+            <GestionRecintos />
+          </PrivateRoute>
+        } 
+      />
     </Routes>
   );
 }
 
+// -------------------- App --------------------
 function App() {
+  const [userData, setUserData] = useState(null);
+
+  // Cargar datos del usuario actual
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        const docSnap = await getDoc(doc(db, 'usuarios', user.uid));
+        if (docSnap.exists()) {
+          setUserData(docSnap.data());
+        }
+      } else {
+        setUserData(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
     <BrowserRouter>
-      <Header />
+      <Header userData={userData} />
       <main style={{ minHeight: '80vh' }}>
-        <AppContent />
+        <AppContent userData={userData} />
       </main>
       <Footer />
     </BrowserRouter>

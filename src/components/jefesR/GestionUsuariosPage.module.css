@@ -5,96 +5,217 @@
   --rojo-oscuro: #BE0A2D;
   --azul-oscuro: #2E3C74;
   --azul-claro: #5893F3;
-  --gris-claro: #f5f5f5;
-  --gris-medio: #cccccc;
-  --gris-oscuro: #888888;
+  --gris-claro: #f9f9f9;
+  --gris-medio: #e0e0e0;
+  --gris-oscuro: #555555;
+  --sombra-suave: 0 4px 12px rgba(0,0,0,0.08);
+  --transition: all 0.3s ease;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--azul-oscuro);
+  background-color: #f7f9fc;
+  margin: 0;
+  padding: 0;
 }
 
 .container {
   padding: 2rem;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: var(--azul-oscuro);
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
-h2 {
+/* ===== Sección Jefes Faltantes ===== */
+.jefesFaltantes {
+  background: linear-gradient(145deg, #ffffff, var(--rojo-libre));
+  padding: 2rem;
+  border-radius: 14px;
+  box-shadow: var(--sombra-suave);
+  transition: transform 0.3s ease;
+  color: white;
+}
+
+.jefesFaltantes:hover {
+  transform: translateY(-3px);
+}
+
+.jefesFaltantes h3 {
   font-family: 'Novera Black', serif;
-  font-weight: 900;
-  font-size: clamp(2rem, 5vw, 2.8rem);
-  text-align: center;
-  text-transform: uppercase;
-  color: var(--rojo-libre);
-  margin-bottom: 1.5rem;
-  letter-spacing: 1.5px;
-  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.25);
+  color: white;
+  margin-bottom: 1rem;
+  font-size: clamp(1.8rem, 6vw, 2.2rem);
 }
 
-/* Estilos para inputs de filtros */
-.filtros {
-  margin-bottom: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.filtros input[type="text"] {
-  padding: 0.6rem 1rem;
-  border: 2px solid var(--azul-claro);
-  border-radius: 8px;
+/* Inputs de filtros */
+.inputFiltro {
+  width: 100%;
+  max-width: 400px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
   font-size: 1rem;
-  color: var(--azul-oscuro);
-  transition: border-color 0.3s ease;
+  border: 1.5px solid var(--gris-medio);
+  border-radius: 8px;
+  transition: var(--transition);
 }
 
-.filtros input[type="text"]:focus {
+.inputFiltro:focus {
   outline: none;
   border-color: var(--rojo-libre);
-  box-shadow: 0 0 6px var(--rojo-libre);
+  box-shadow: 0 0 8px rgba(218,6,8,0.2);
 }
 
-/* Mensajes de carga y vacíos */
-.mensaje {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--gris-oscuro);
-  text-align: center;
-  margin: 2rem 0;
+/* Tabla */
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--sombra-suave);
 }
 
-/* Separador */
-.separador {
-  border: none;
-  border-top: 2px solid var(--azul-claro);
-  margin: 3rem 0;
+.tabla th,
+.tabla td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--gris-medio);
+  text-align: left;
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Contenedor para las listas de usuarios */
-.listaUsuarios {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-/* Para futuros botones o acciones, ejemplo: */
-.botonAccion {
-  background: linear-gradient(45deg, var(--rojo-libre), var(--rojo-oscuro));
+.tabla th {
+  background: var(--azul-oscuro);
   color: white;
-  padding: 0.6rem 1.2rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tabla tr:nth-child(even) {
+  background-color: #fce5e5; /* rojo muy claro */
+}
+
+.tabla tr:hover {
+  background-color: var(--rojo-oscuro);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(218,6,8,0.3);
+  transition: var(--transition);
+}
+
+/* Botón de filtro */
+.filtroBoton {
+  background: var(--rojo-libre);
   border: none;
+  color: white;
+  padding: 0.5rem 1.2rem;
   border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: var(--transition);
+}
+
+.filtroBoton:hover {
+  background-color: var(--rojo-oscuro);
+  box-shadow: 0 4px 12px rgba(218,6,8,0.3);
+}
+
+/* Paginación */
+.paginacion {
+  margin-top: 1.5rem;
+  text-align: center;
+  user-select: none;
+}
+
+.paginacion button {
+  margin: 0 4px;
+  padding: 8px 14px;
   font-weight: 700;
   font-family: 'Novera Black', serif;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.3s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  box-shadow: 0 4px 10px rgba(218, 6, 8, 0.6);
+  background-color: var(--gris-claro);
+  color: var(--azul-oscuro);
+  box-shadow: var(--sombra-suave);
+  transition: var(--transition);
 }
 
-.botonAccion:hover {
-  background: linear-gradient(45deg, var(--rojo-oscuro), var(--rojo-libre));
-  box-shadow: 0 6px 16px rgba(190, 10, 45, 0.8);
+.paginacion button:hover:not(.activo) {
+  background-color: var(--rojo-libre);
+  color: white;
+  box-shadow: 0 4px 12px rgba(218,6,8,0.6);
+}
+
+.paginacion button.activo {
+  background-color: var(--rojo-libre);
+  color: white;
+  box-shadow: 0 6px 14px rgba(218,6,8,0.7);
+  cursor: default;
+}
+
+/* Botones de modales */
+.modalButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.btnPrimary {
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  min-width: 120px;
+  transition: var(--transition);
+  background-color: var(--rojo-libre);
+  color: white;
+}
+
+.btnPrimary:hover {
+  background-color: var(--rojo-oscuro);
+  box-shadow: 0 6px 14px rgba(218,6,8,0.5);
+}
+
+.btnSecondary {
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  min-width: 120px;
+  transition: var(--transition);
+  background-color: #e0e0e0;
+  color: #555;
+}
+
+.btnSecondary:hover {
+  background-color: #bbb;
+  color: white;
+}
+
+/* Botones dentro de la tabla */
+.tableButton {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  background-color: var(--rojo-libre);
+  color: white;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.tableButton:hover {
+  background-color: var(--rojo-oscuro);
+  box-shadow: 0 4px 10px rgba(218,6,8,0.4);
 }
 
 /* Responsive */
@@ -103,11 +224,16 @@ h2 {
     padding: 1rem;
   }
 
-  .filtros {
-    gap: 0.75rem;
+  .jefesFaltantes h3 {
+    font-size: clamp(1.5rem, 8vw, 2rem);
   }
 
-  h2 {
-    font-size: clamp(1.5rem, 8vw, 2.2rem);
+  .tabla th,
+  .tabla td {
+    padding: 8px 10px;
+  }
+
+  .inputFiltro {
+    max-width: 100%;
   }
 }

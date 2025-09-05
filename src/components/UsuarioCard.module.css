@@ -1,3 +1,5 @@
+/* --- Estilos base que ya tienes --- */
+
 /* Contenedor de la tarjeta usuario */
 .card {
   background-color: #f9f9f9;
@@ -52,6 +54,24 @@
   background-color: #DA0608;
 }
 
+.buttonInhabilitar {
+  background-color: #D9534F; /* rojo Bootstrap para peligro */
+  border: none;
+  color: white;
+  padding: 0.4rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+  margin-left: 0.5rem;
+  transition: background-color 0.3s ease;
+  white-space: nowrap;
+}
+
+.buttonInhabilitar:hover {
+  background-color: #C9302C; /* rojo más oscuro al pasar mouse */
+}
+
+
 /* Etiqueta del rol, texto oscuro, fondo transparente */
 .rolEtiqueta {
   padding: 2px 10px;
@@ -87,8 +107,32 @@
 }
 
 .rol_delegado {
-  border-color: #e7e5e5; /* rojo intenso LIBRE */
+  border-color: #e7e5e5; /* gris claro */
   box-shadow: 0 0 8px #92929255;
+}
+
+/* --- Nuevos estilos para usuarios inhabilitados --- */
+
+/* Etiqueta rol inhabilitado */
+.rol_inhabilitado {
+  border-color: #999999; /* gris medio */
+  box-shadow: 0 0 8px #99999955;
+  color: #777777; /* texto gris tenue */
+  background-color: #f0f0f0;
+}
+
+/* Tarjeta usuario inhabilitado */
+.card.rol_inhabilitado {
+  background-color: #f5f5f5;
+  color: #888888;
+  border: 1.5px solid #cccccc;
+  box-shadow: none;
+}
+
+/* Opcional: texto en la tarjeta más tenue para inhabilitados */
+.card.rol_inhabilitado p,
+.card.rol_inhabilitado strong {
+  color: #777777;
 }
 
 /* Responsive: en pantallas pequeñas ajustamos layout */
@@ -102,6 +146,23 @@
     margin-top: 0.7rem;
   }
 }
+
+.buttonEliminar {
+  background-color: #d9534f;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  margin-top: 5px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.buttonEliminar:hover {
+  background-color: #c9302c;
+}
+
+
 
 
 

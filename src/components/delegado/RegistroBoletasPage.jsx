@@ -12,17 +12,19 @@ import {
     getDoc,
 } from 'firebase/firestore';
 import { onAuthStateChanged } from "firebase/auth";
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, getStorage, uploadBytesResumable } from 'firebase/storage';
 import Loader from '../Loader';
 import styles from './RegistroBoletasPage.module.css';
 import Swal from 'sweetalert2';
 import { FaSearch } from 'react-icons/fa'
 import ClipLoader from 'react-spinners/ClipLoader';
 import Cropper from 'react-easy-crop';
-import getCroppedImg, { mejorarEstiloDocumento } from '../utils/cropImage';
+import getCroppedImg from '../utils/cropImage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import PasoIndicador from './PasoIndicador';
+import imageCompression from 'browser-image-compression';
+
 
 
 
@@ -36,8 +38,6 @@ const partidos = [
     'MORENA',
     'UNIDAD',
     'PARTIDO DEMOCRATA CRISTIANO (PDC)',
-    'BIA-YUQUI',
-    'OICH',
 ];
 
 export default function RegistroBoletasPage() {
@@ -61,6 +61,7 @@ export default function RegistroBoletasPage() {
         papeletasNoUtilizadas: '', // nuevo
         imagenActa: null,
         imagenHojaTrabajo: null,
+        estado: '', // o 'observado'
     });
     const [previewActa, setPreviewActa] = useState(null);
     const [previewHoja, setPreviewHoja] = useState(null);
@@ -94,7 +95,8 @@ export default function RegistroBoletasPage() {
     const [recortandoTipo, setRecortandoTipo] = useState(null); // 'acta' o 'hoja'
     const [userData, setUserData] = useState(null);
     const [usuarioActual, setUsuarioActual] = useState(null);
-
+    const [sizeActa, setSizeActa] = React.useState(null);
+    const [sizeHoja, setSizeHoja] = React.useState(null);
 
     // Cargar usuario actual y redirigir si no tiene permiso
     useEffect(() => {
@@ -108,7 +110,7 @@ export default function RegistroBoletasPage() {
                 setUsuarioActual(data);
 
                 // Redirigir si no es admin ni jefe de recinto
-                if (data.rol !== 'administrador' && data.rol !== 'delegado' && data.rol !== 'jefe_recinto') {
+                if (data.rol !== 'administrador' && data.rol !== 'revisor' && data.rol !== 'delegado' && data.rol !== 'jefe_recinto') {
                     navigate('/');
                 }
             } else {
@@ -124,21 +126,27 @@ export default function RegistroBoletasPage() {
         const file = e.target.files[0];
         if (!file) return;
 
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(2); // tamaño en MB con 2 decimales
+
         const reader = new FileReader();
         reader.onload = () => {
             if (tipo === 'acta') {
                 setPreviewActa(reader.result);
                 setImagenActaSrc(reader.result);
-                setForm(prev => ({ ...prev, imagenActa: file })); // ✅ guardar archivo
+                setForm(prev => ({ ...prev, imagenActa: file }));
+                setSizeActa(sizeMB); // guardar tamaño
             } else {
                 setPreviewHoja(reader.result);
                 setImagenHojaSrc(reader.result);
-                setForm(prev => ({ ...prev, imagenHojaTrabajo: file })); // ✅ guardar archivo
+                setForm(prev => ({ ...prev, imagenHojaTrabajo: file }));
+                setSizeHoja(sizeMB); // guardar tamaño
             }
         };
         reader.readAsDataURL(file);
     };
 
+
+    ///////////-----------------
     const onCropComplete = useCallback((_, croppedArea) => {
         setCroppedAreaPixels(croppedArea);
     }, []);
@@ -146,6 +154,7 @@ export default function RegistroBoletasPage() {
     const iniciarRecorte = (tipo) => {
         setRecortandoTipo(tipo);
         setZoom(1);
+        // Se puede centrar o dejar en último punto donde estuvo
         setCrop({ x: 0, y: 0 });
     };
 
@@ -156,61 +165,30 @@ export default function RegistroBoletasPage() {
     };
 
     const aplicarRecorte = async () => {
-        const originalSrc = recortandoTipo === 'acta' ? imagenActaSrc : imagenHojaSrc;
+        const originalSrc =
+            recortandoTipo === 'acta' ? imagenActaSrc : imagenHojaSrc;
+
         const resultado = await getCroppedImg(originalSrc, croppedAreaPixels);
-        const mejorado = await mejorarEstiloDocumento(resultado);
-        const fileFinal = await urlToFile(mejorado, `${recortandoTipo}_${Date.now()}.jpg`);
+
+        // ⚠ Si ya no quieres filtros, llama solo al recorte
+        const fileFinal = await urlToFile(
+            resultado,
+            `${recortandoTipo}_${Date.now()}.jpg`
+        );
+        const sizeMB = (fileFinal.size / (1024 * 1024)).toFixed(2);
 
         if (recortandoTipo === 'acta') {
-            setPreviewActa(mejorado);
-            setForm(prev => ({ ...prev, imagenActa: fileFinal }));
+            setPreviewActa(resultado);
+            setForm((prev) => ({ ...prev, imagenActa: fileFinal }));
+            setSizeActa(sizeMB);
         } else {
-            setPreviewHoja(mejorado);
-            setForm(prev => ({ ...prev, imagenHojaTrabajo: fileFinal }));
+            setPreviewHoja(resultado);
+            setForm((prev) => ({ ...prev, imagenHojaTrabajo: fileFinal }));
+            setSizeHoja(sizeMB);
         }
 
         setRecortandoTipo(null);
     };
-
-
-    // Filtra departamentos que contengan el texto buscado (sin importar mayúsculas/minúsculas)
-    const departamentosFiltrados = departamentos.filter(d =>
-        d.nombre.toLowerCase().includes(busquedaDepto.toLowerCase())
-    );
-
-    // Filtra circunscripciones que contengan el texto buscado
-    const circunscripcionesFiltradas = circunscripciones.filter(c =>
-        c.nombre.toLowerCase().includes(busquedaCirc.toLowerCase())
-    );
-
-    // Filtra provincias que contengan el texto buscado
-    const provinciasFiltradas = provincias.filter(p =>
-        p.nombre.toLowerCase().includes(busquedaProv.toLowerCase())
-    );
-
-    // Filtra municipios que contengan el texto buscado
-    const municipiosFiltrados = municipios.filter(m =>
-        m.nombre.toLowerCase().includes(busquedaMuni.toLowerCase())
-    );
-
-    // Filtra recintos que contengan el texto buscado
-    const recintosFiltrados = recintos.filter(r =>
-        r.nombre.toLowerCase().includes(busquedaRecinto.toLowerCase())
-    );
-
-
-    // Carga inicial de departamentos al montar el componente
-    useEffect(() => {
-        // Función asíncrona para obtener documentos de la colección 'departamentos'
-        const cargarDepartamentos = async () => {
-            const snap = await getDocs(collection(db, 'departamentos'));
-            // Mapear documentos y actualizar estado con lista de departamentos
-            setDepartamentos(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setLoading(false); // Indicar que la carga terminó
-        };
-        cargarDepartamentos(); // Ejecutar la función
-    }, []); // Se ejecuta solo una vez al montar el componente
-
 
     // Listener para detectar cambios en el estado de autenticación del usuario
     useEffect(() => {
@@ -230,47 +208,125 @@ export default function RegistroBoletasPage() {
     }, []); // Solo al montar el componente
 
     //cargar datos al form
+    // ----------------- CARGA JERÁRQUICA SEGÚN userData Y RECINTO -----------------
     useEffect(() => {
-        const cargarMesasDesdeRecinto = async () => {
+        const cargarJerarquia = async () => {
             try {
                 setLoading(true);
 
-                const mesasSnap = await getDocs(
-                    query(collection(db, 'mesas'), where('idRecinto', '==', userData.recintoId))
-                );
+                let departamentoId, circunscripcionId, provinciaId, municipioId;
 
-                const mesas = mesasSnap.docs
-                    .map(doc => ({
-                        id: doc.id,
-                        ...doc.data(),
-                    }))
-                    .sort((a, b) => parseInt(b.codigo) - parseInt(a.codigo)); // 👈 Orden descendente
+                if (userData?.rol === 'administrador' || userData?.rol === 'revisor') {
+                    // Para admin y revisor, tomar IDs desde el form (selección manual)
+                    departamentoId = form.departamento;
+                    circunscripcionId = form.circunscripcion;
+                    provinciaId = form.provincia;
+                    municipioId = form.municipio;
+                } else {
+                    // Para otros roles, tomar IDs fijos desde userData
+                    departamentoId = userData?.departamentoId;
+                    circunscripcionId = userData?.circunscripcionId;
+                    provinciaId = userData?.provinciaId;
+                    municipioId = userData?.municipioId;
 
-                setMesasDisponibles(mesas);
-                console.log('Mesas disponibles cargadas y ordenadas:', mesas);
+                    setForm(prev => ({
+                        ...prev,
+                        departamento: departamentoId,
+                        circunscripcion: circunscripcionId,
+                        provincia: provinciaId,
+                        municipio: municipioId,
+                        recinto: userData?.recintoId,
+                    }));
+                }
+
+                // Cargar departamentos (todos)
+                const departamentosSnap = await getDocs(collection(db, "departamentos"));
+                setDepartamentos(departamentosSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+                // Cargar circunscripciones filtradas si hay departamento
+                if (departamentoId) {
+                    const circSnap = await getDocs(
+                        query(collection(db, "circunscripciones"), where("idDepartamento", "==", departamentoId))
+                    );
+                    setCircunscripciones(circSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } else {
+                    setCircunscripciones([]);
+                }
+
+                // Cargar provincias filtradas si hay circunscripcion
+                if (circunscripcionId) {
+                    const provSnap = await getDocs(
+                        query(collection(db, "provincias"), where("idCircunscripcion", "==", circunscripcionId))
+                    );
+                    setProvincias(provSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } else {
+                    setProvincias([]);
+                }
+
+                // Cargar municipios filtrados si hay provincia
+                if (provinciaId) {
+                    const muniSnap = await getDocs(
+                        query(collection(db, "municipios"), where("idProvincia", "==", provinciaId))
+                    );
+                    setMunicipios(muniSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } else {
+                    setMunicipios([]);
+                }
+
+                // Cargar recintos filtrados si hay municipio
+                if (municipioId) {
+                    const recintoSnap = await getDocs(
+                        query(collection(db, "recintos"), where("idMunicipio", "==", municipioId))
+                    );
+                    setRecintos(recintoSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } else {
+                    setRecintos([]);
+                }
 
             } catch (error) {
-                console.error('Error al cargar mesas desde el useEffect:', error);
+                console.error("Error cargando jerarquía:", error);
             } finally {
                 setLoading(false);
             }
         };
+
         if (userData) {
-            // Setear el formulario con los datos jerárquicos
-            setForm(prev => ({
-                ...prev,
-                departamento: userData.departamentoId,
-                circunscripcion: userData.circunscripcionId,
-                provincia: userData.provinciaId,
-                municipio: userData.municipioId,
-                recinto: userData.recintoId,
-            }));
-
-            // Cargar mesas disponibles
-            cargarMesasDesdeRecinto();
+            cargarJerarquia();
         }
-    }, [userData]);
+    }, [userData, form.departamento, form.circunscripcion, form.provincia, form.municipio]);
 
+    // ----------------- CARGA DE MESAS -----------------
+    useEffect(() => {
+        const cargarMesas = async () => {
+            try {
+                setLoading(true);
+
+                const idRecinto = (userData?.rol === 'administrador' || userData?.rol === 'revisor')
+                    ? form.recinto
+                    : userData?.recintoId;
+                if (!idRecinto) return;
+
+                const mesasSnap = await getDocs(
+                    query(collection(db, 'mesas'), where('idRecinto', '==', idRecinto))
+                );
+
+                const mesas = mesasSnap.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .sort((a, b) => parseInt(b.codigo) - parseInt(a.codigo));
+
+                setMesasDisponibles(mesas);
+
+            } catch (error) {
+                console.error('Error al cargar mesas:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (userData && (userData.rol !== 'administrador' && userData.rol !== 'revisor' || form.recinto)) {
+            cargarMesas();
+        }
+    }, [userData, form.recinto]);
 
     // Función para cargar boletas asociadas al usuario actual
     const cargarBoletasUsuario = async (user) => {
@@ -314,84 +370,13 @@ export default function RegistroBoletasPage() {
     };
 
 
-    // Cargar departamento del usuario
-    useEffect(() => {
-        if (!userData?.departamentoId) return;
-
-        const cargar = async () => {
-            const ref = doc(db, 'departamentos', userData.departamentoId);
-            const snap = await getDoc(ref);
-            if (snap.exists()) {
-                setDepartamentos([{ id: snap.id, ...snap.data() }]);
-            }
-        };
-        cargar();
-    }, [userData]);
-
-    // Cargar circunscripción
-    useEffect(() => {
-        if (!userData?.circunscripcionId) return;
-
-        const cargar = async () => {
-            const ref = doc(db, 'circunscripciones', userData.circunscripcionId);
-            const snap = await getDoc(ref);
-            if (snap.exists()) {
-                setCircunscripciones([{ id: snap.id, ...snap.data() }]);
-            }
-        };
-        cargar();
-    }, [userData]);
-
-    // Cargar provincia
-    useEffect(() => {
-        if (!userData?.provinciaId) return;
-
-        const cargar = async () => {
-            const ref = doc(db, 'provincias', userData.provinciaId);
-            const snap = await getDoc(ref);
-            if (snap.exists()) {
-                setProvincias([{ id: snap.id, ...snap.data() }]);
-            }
-        };
-        cargar();
-    }, [userData]);
-
-    // Cargar municipio
-    useEffect(() => {
-        if (!userData?.municipioId) return;
-
-        const cargar = async () => {
-            const ref = doc(db, 'municipios', userData.municipioId);
-            const snap = await getDoc(ref);
-            if (snap.exists()) {
-                setMunicipios([{ id: snap.id, ...snap.data() }]);
-            }
-        };
-        cargar();
-    }, [userData]);
-
-    // Cargar recinto
-    useEffect(() => {
-        if (!userData?.recintoId) return;
-
-        const cargar = async () => {
-            const ref = doc(db, 'recintos', userData.recintoId);
-            const snap = await getDoc(ref);
-            if (snap.exists()) {
-                setRecintos([{ id: snap.id, ...snap.data() }]);
-            }
-            setLoading(false); // Solo terminamos de cargar cuando todo esté listo
-        };
-        cargar();
-    }, [userData]);
-
     // Función para mostrar advertencia con Swal
     const advertirSiInconsistente = (campo, votosTotales, papeletas) => {
         if (votosTotales > papeletas) {
             Swal.fire({
                 icon: 'warning',
                 title: `¡Advertencia en ${campo}!`,
-                text: `La suma de votos (${votosTotales}) supera las papeletas en ánfora (${papeletas}).`,
+                text: `La suma de votos (${votosTotales}) supera las papeletas en ánfora.`,
                 confirmButtonText: 'Entendido',
                 timer: 4000,
             });
@@ -406,27 +391,101 @@ export default function RegistroBoletasPage() {
     };
 
 
-    const handleChange = async (e) => {
-        const { name, value, files, dataset } = e.target;
+    //calcular totales
+    useEffect(() => {
+        const totalPresidente = Object.values(form.votosPresidente || {}).reduce(
+            (acc, val) => acc + (parseInt(val) || 0),
+            0
+        );
 
-        // Validar solo números enteros no negativos para campos numéricos
+        const totalDiputado = Object.values(form.votosDiputado || {}).reduce(
+            (acc, val) => acc + (parseInt(val) || 0),
+            0
+        );
+
+        const blancosPresidente = parseInt(form.blancosPresidente) || 0;
+        const nulosPresidente = parseInt(form.nulosPresidente) || 0;
+        const totalCamposPresidente = totalPresidente + blancosPresidente + nulosPresidente;
+
+        const blancosDiputado = parseInt(form.blancosDiputado) || 0;
+        const nulosDiputado = parseInt(form.nulosDiputado) || 0;
+        const totalCamposDiputado = totalDiputado + blancosDiputado + nulosDiputado;
+
+        if (totalCamposPresidente > 300) {
+            marcarInputError('validosPresidente', true);
+            marcarInputError('blancosPresidente', true);
+            marcarInputError('nulosPresidente', true);
+            advertirSiInconsistente('Presidente', totalCamposPresidente, 300);
+        } else {
+            marcarInputError('validosPresidente', false);
+            marcarInputError('blancosPresidente', false);
+            marcarInputError('nulosPresidente', false);
+        }
+
+        if (totalCamposDiputado > 300) {
+            marcarInputError('validosDiputado', true);
+            marcarInputError('blancosDiputado', true);
+            marcarInputError('nulosDiputado', true);
+            advertirSiInconsistente('Diputado', totalCamposDiputado, 300);
+        } else {
+            marcarInputError('validosDiputado', false);
+            marcarInputError('blancosDiputado', false);
+            marcarInputError('nulosDiputado', false);
+        }
+
+        setForm(prev => ({
+            ...prev,
+            validosPresidente: totalPresidente.toString(),
+            validosDiputado: totalDiputado.toString(),
+        }));
+    }, [
+        form.votosPresidente,
+        form.votosDiputado,
+        form.blancosPresidente,
+        form.nulosPresidente,
+        form.blancosDiputado,
+        form.nulosDiputado,
+    ]);
+
+
+
+    const handleChange = async (e) => {
+        const { name, value, files, dataset, type, checked } = e.target;
+
         const camposNumericos = [
-            'validosPresidente',
-            'validosDiputado',
             'blancosPresidente',
             'blancosDiputado',
             'nulosPresidente',
             'nulosDiputado',
             'papeletasAnfora',
             'papeletasNoUtilizadas',
-            //campos numéricos que tengas en el form
         ];
 
-        // Función auxiliar para validar entero >= 0 o vacío
-        const esNumeroValido = (val) => val === '' || (/^\d+$/.test(val) && Number(val) >= 0);
+        const esNumeroValido = (val) => val === '' || (/^\d{1,3}$/.test(val) && Number(val) >= 0);
+
+        if (name === 'estado' && type === 'checkbox') {
+            if (checked) {
+                const confirmacion = await Swal.fire({
+                    title: '¿Estás seguro?',
+                    text: '¿Deseas marcar esta boleta como OBSERVADA?',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, marcar',
+                    cancelButtonText: 'Cancelar',
+                });
+
+                if (confirmacion.isConfirmed) {
+                    setForm(prev => ({ ...prev, estado: 'observado' }));
+                } else {
+                    setForm(prev => ({ ...prev, estado: '' }));
+                }
+            } else {
+                setForm(prev => ({ ...prev, estado: '' }));
+            }
+            return;
+        }
 
         if (dataset?.tipo === 'presidente') {
-            // Validar solo si el valor es válido para evitar letras o negativos
             if (esNumeroValido(value)) {
                 setForm(prev => ({
                     ...prev,
@@ -436,7 +495,10 @@ export default function RegistroBoletasPage() {
                     },
                 }));
             }
-        } else if (dataset?.tipo === 'diputado') {
+            return;
+        }
+
+        if (dataset?.tipo === 'diputado') {
             if (esNumeroValido(value)) {
                 setForm(prev => ({
                     ...prev,
@@ -446,39 +508,37 @@ export default function RegistroBoletasPage() {
                     },
                 }));
             }
-        } else if (name === 'imagenActa' || name === 'imagenHojaTrabajo') {
+            return;
+        }
+
+        if (name === 'imagenActa' || name === 'imagenHojaTrabajo') {
             const file = files[0];
             if (file) {
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                await Swal.fire({
+                    icon: 'info',
+                    title: `Archivo seleccionado`,
+                    text: `Tamaño del archivo (${name === 'imagenActa' ? 'Acta' : 'Hoja de Trabajo'}): ${sizeMB} MB`,
+                    timer: 1800,
+                    showConfirmButton: false,
+                });
+
                 setForm(prev => ({ ...prev, [name]: file }));
 
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                    if (name === 'imagenActa') {
-                        setPreviewActa(reader.result);
-                    } else {
-                        setPreviewHoja(reader.result);
-                    }
+                    if (name === 'imagenActa') setPreviewActa(reader.result);
+                    else setPreviewHoja(reader.result);
                 };
                 reader.readAsDataURL(file);
             }
-        } else if (camposNumericos.includes(name)) {
+            return;
+        }
+
+        if (camposNumericos.includes(name)) {
             if (esNumeroValido(value)) {
                 setForm(prev => {
                     const nuevoForm = { ...prev, [name]: value };
-
-                    const sumaVotosPresidente = Object.values(nuevoForm.votosPresidente || {}).reduce(
-                        (acc, val) => acc + (parseInt(val) || 0), 0
-                    );
-                    const sumaVotosDiputado = Object.values(nuevoForm.votosDiputado || {}).reduce(
-                        (acc, val) => acc + (parseInt(val) || 0), 0
-                    );
-
-                    if (!nuevoForm.validosPresidente || nuevoForm.validosPresidente === '') {
-                        nuevoForm.validosPresidente = sumaVotosPresidente.toString();
-                    }
-                    if (!nuevoForm.validosDiputado || nuevoForm.validosDiputado === '') {
-                        nuevoForm.validosDiputado = sumaVotosDiputado.toString();
-                    }
 
                     const papeletasPresidente =
                         (parseInt(nuevoForm.validosPresidente) || 0) +
@@ -509,11 +569,49 @@ export default function RegistroBoletasPage() {
                     return nuevoForm;
                 });
             }
-        } else {
-            // Para campos que no necesitan validación numérica
-            setForm(prev => ({ ...prev, [name]: value }));
+            return;
         }
+
+        if (['departamento', 'circunscripcion', 'provincia', 'municipio', 'recinto'].includes(name)) {
+            setForm(prev => {
+                const nuevoForm = { ...prev, [name]: value };
+
+                switch (name) {
+                    case 'departamento':
+                        nuevoForm.circunscripcion = '';
+                        nuevoForm.provincia = '';
+                        nuevoForm.municipio = '';
+                        nuevoForm.recinto = '';
+                        nuevoForm.nroMesa = '';
+                        break;
+                    case 'circunscripcion':
+                        nuevoForm.provincia = '';
+                        nuevoForm.municipio = '';
+                        nuevoForm.recinto = '';
+                        nuevoForm.nroMesa = '';
+                        break;
+                    case 'provincia':
+                        nuevoForm.municipio = '';
+                        nuevoForm.recinto = '';
+                        nuevoForm.nroMesa = '';
+                        break;
+                    case 'municipio':
+                        nuevoForm.recinto = '';
+                        nuevoForm.nroMesa = '';
+                        break;
+                    case 'recinto':
+                        nuevoForm.nroMesa = '';
+                        break;
+                }
+
+                return nuevoForm;
+            });
+            return;
+        }
+
+        setForm(prev => ({ ...prev, [name]: value }));
     };
+
 
 
     /*
@@ -584,6 +682,7 @@ export default function RegistroBoletasPage() {
 
     */
 
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -611,14 +710,14 @@ export default function RegistroBoletasPage() {
             { archivo: form.imagenActa, nombre: 'Acta' },
             { archivo: form.imagenHojaTrabajo, nombre: 'Hoja de Trabajo' },
         ];
-        const MAX_TAMANO_MB = 3;
+        const MAX_TAMANO_MB = 6;
         for (const { archivo, nombre } of archivos) {
             const tamanoMB = archivo.size / (1024 * 1024);
             if (tamanoMB > MAX_TAMANO_MB) {
                 await Swal.fire({
                     icon: 'warning',
                     title: `Archivo demasiado grande`,
-                    text: `El archivo de ${nombre} no debe superar los 3 MB.`,
+                    text: `El archivo de ${nombre} no debe superar los ${MAX_TAMANO_MB} MB.`,
                     confirmButtonColor: '#d33',
                 });
                 return;
@@ -628,63 +727,41 @@ export default function RegistroBoletasPage() {
         try {
             setSubmitting(true);
 
-            // ✅ Obtener UID y verificar autenticación
             const user = auth.currentUser;
             if (!user) throw new Error('Usuario no autenticado');
 
-            // ✅ Obtener recinto del usuario
             const userDocRef = doc(db, 'usuarios', user.uid);
             const userSnap = await getDoc(userDocRef);
             if (!userSnap.exists()) throw new Error('Usuario no encontrado');
 
             const userData = userSnap.data();
 
-            // 🔍 Log para identificar al usuario que intenta subir el registro
-            console.log('🧑 Usuario intentando subir registro:', {
-                uid: user.uid,
-                nombre: userData.nombre,
-                email: userData.email,
-                recintoId: userData.recintoId,
-                recintoNombre: userData.recintoNombre,
-                rol: userData.rol,
-            });
+            // Determinar recinto a usar según rol
+            const recintoParaGuardar = (userData.rol === 'administrador' || userData.rol === 'revisor')
+                ? form.recinto
+                : userData.recintoId;
 
-            const recintoIdUsuario = userData.recintoId;
+            if (!recintoParaGuardar) throw new Error('Recinto es indefinido');
 
-            // ✅ Verificar si se está intentando registrar en otro recinto (solo permitido el suyo)
-            console.log('Comparando recinto:', {
-                recintoSeleccionadoEnFormulario: form.recinto,
-                recintoAsignadoAlUsuario: recintoIdUsuario
-            });
-
-            if (form.recinto !== recintoIdUsuario) {
-                await Swal.fire({
-                    icon: 'warning',
-                    title: 'Recinto inválido',
-                    text: 'Solo puedes registrar boletas en tu propio recinto.',
-                    confirmButtonColor: '#d33',
-                });
-                return;
-            }
-
-            // ✅ Verificar si ya existe una boleta para este recinto y nroMesa
+            // Validar si ya existe boleta para ese recinto y mesa
             const q = query(
                 collection(db, 'recepcion'),
-                where('recinto', '==', recintoIdUsuario),
+                where('recinto', '==', recintoParaGuardar),
                 where('nroMesa', '==', form.nroMesa)
             );
             const snap = await getDocs(q);
+
             if (!snap.empty) {
                 await Swal.fire({
                     icon: 'warning',
                     title: 'Número de mesa duplicado',
-                    text: `Ya se ha registrado una boleta con el número de mesa ${form.nroMesa} en tu recinto.`,
+                    text: `Ya se ha registrado una boleta con el número de mesa ${form.nroMesa} en el recinto seleccionado.`,
                     confirmButtonColor: '#d33',
                 });
                 return;
             }
 
-            // 🟢 Subir imágenes
+            // Subir imágenes
             const refActa = ref(storage, `actas/${form.nroMesa}_${Date.now()}`);
             await uploadBytes(refActa, form.imagenActa);
             const urlActa = await getDownloadURL(refActa);
@@ -693,10 +770,23 @@ export default function RegistroBoletasPage() {
             await uploadBytes(refHoja, form.imagenHojaTrabajo);
             const urlHoja = await getDownloadURL(refHoja);
 
+            // Obtener campo dat del recinto
+            const recintoDocRef = doc(db, 'recintos', recintoParaGuardar);
+            const recintoSnap = await getDoc(recintoDocRef);
+            let datRecinto = null;
+            if (recintoSnap.exists()) {
+                datRecinto = recintoSnap.data().dat;
+            } else {
+                console.warn('Recinto no encontrado al intentar obtener dat');
+            }
+
+            // Preparar datos para guardar
             const { imagenActa, imagenHojaTrabajo, ...formSinImagenes } = form;
 
             await addDoc(collection(db, 'recepcion'), {
                 ...formSinImagenes,
+                recinto: recintoParaGuardar,
+                dat: datRecinto, // <-- aquí se guarda dat
                 imagenActaUrl: urlActa,
                 imagenHojaTrabajoUrl: urlHoja,
                 creadoEn: serverTimestamp(),
@@ -707,13 +797,13 @@ export default function RegistroBoletasPage() {
             await Swal.fire({
                 icon: 'success',
                 title: 'Registro exitoso',
-                text: 'La boleta fue enviada correctamente.',
+                text: 'El Acta fue enviada correctamente.',
                 confirmButtonColor: '#0a58ca',
             });
 
-            // ✅ Limpiar formulario
+            // Limpiar formulario
             setForm({
-                recinto: recintoIdUsuario,
+                recinto: (userData.rol === 'administrador' || userData.rol === 'revisor') ? '' : recintoParaGuardar,
                 nroMesa: '',
                 votosPresidente: {},
                 votosDiputado: {},
@@ -732,17 +822,18 @@ export default function RegistroBoletasPage() {
             setPreviewHoja(null);
 
         } catch (err) {
-            console.error(err);
             await Swal.fire({
                 icon: 'error',
                 title: 'Error al enviar',
-                text: 'Ocurrió un problema al registrar la boleta. Intenta nuevamente.',
+                text: 'Ocurrió un problema al registrar el acta. Intenta nuevamente.',
                 confirmButtonColor: '#d33',
             });
+            console.error(err);
         } finally {
             setSubmitting(false);
         }
     };
+
 
 
     const RecorteBotones = ({ aplicarRecorte, cancelarRecorte }) => {
@@ -831,6 +922,7 @@ export default function RegistroBoletasPage() {
                                     className={styles.imagenPreview}
                                 />
                                 <br />
+                                <p>Tamaño: {sizeActa} MB</p>
                                 <button
                                     type="button"
                                     onClick={() => iniciarRecorte('acta')}
@@ -886,6 +978,7 @@ export default function RegistroBoletasPage() {
                                     className={styles.imagenPreview}
                                 />
                                 <br />
+                                <p>Tamaño: {sizeHoja} MB</p>
                                 <button
                                     type="button"
                                     onClick={() => iniciarRecorte('hoja')}
@@ -900,15 +993,24 @@ export default function RegistroBoletasPage() {
 
                 {/* Recorte */}
                 {recortandoTipo && (
-                    <div style={{ position: 'relative', width: '100%', height: 300, marginBottom: 20 }}>
+                    <div
+                        style={{
+                            position: 'relative',
+                            width: '100%',
+                            height: 300,
+                            marginBottom: 20,
+                        }}
+                    >
                         <Cropper
-                            image={recortandoTipo === 'acta' ? imagenActaSrc : imagenHojaSrc}
+                            image={
+                                recortandoTipo === 'acta' ? imagenActaSrc : imagenHojaSrc
+                            }
                             crop={crop}
                             zoom={zoom}
-                            aspect={4 / 3}
-                            onCropChange={setCrop}
-                            onZoomChange={setZoom}
-                            onCropComplete={onCropComplete}
+                            aspect={4 / 2}
+                            onCropChange={setCrop}           // ← Esto permite mover el cuadro
+                            onZoomChange={setZoom}           // ← Esto permite hacer zoom
+                            onCropComplete={onCropComplete}  // ← Guarda coordenadas finales
                         />
 
                         <RecorteBotones
@@ -918,6 +1020,7 @@ export default function RegistroBoletasPage() {
                     </div>
                 )}
 
+
                 {/* Información del recinto y ubicación asignada al usuario */}
                 <PasoIndicador
                     numero={2}
@@ -926,56 +1029,158 @@ export default function RegistroBoletasPage() {
                 />
                 {userData && (
                     <div className={styles.columnas}>
-                        <label>
-                            Departamento:
-                            <input type="text" value={userData.departamentoNombre} disabled />
-                            <input type="hidden" name="departamento" value={userData.departamentoId} />
-                        </label>
+                        {userData.rol === 'administrador' || userData.rol === 'revisor' ? (
+                            <>
+                                <label>
+                                    Departamento:
+                                    <select
+                                        name="departamento"
+                                        value={form.departamento}
+                                        onChange={handleChange}
+                                        required
+                                    >
+                                        <option value="">-- Selecciona un departamento --</option>
+                                        {departamentos.map(d => (
+                                            <option key={d.id} value={d.id}>{d.nombre}</option>
+                                        ))}
+                                    </select>
+                                </label>
 
-                        <label>
-                            Circunscripción:
-                            <input type="text" value={userData.circunscripcionNombre} disabled />
-                            <input type="hidden" name="circunscripcion" value={userData.circunscripcionId} />
-                        </label>
+                                <label>
+                                    Circunscripción:
+                                    <select
+                                        name="circunscripcion"
+                                        value={form.circunscripcion}
+                                        onChange={handleChange}
+                                        required
+                                        disabled={!form.departamento}
+                                    >
+                                        <option value="">-- Selecciona una circunscripción --</option>
+                                        {circunscripciones.map(c => (
+                                            <option key={c.id} value={c.id}>{c.nombre}</option>
+                                        ))}
+                                    </select>
+                                </label>
 
-                        <label>
-                            Provincia:
-                            <input type="text" value={userData.provinciaNombre} disabled />
-                            <input type="hidden" name="provincia" value={userData.provinciaId} />
-                        </label>
+                                <label>
+                                    Provincia:
+                                    <select
+                                        name="provincia"
+                                        value={form.provincia}
+                                        onChange={handleChange}
+                                        required
+                                        disabled={!form.circunscripcion}
+                                    >
+                                        <option value="">-- Selecciona una provincia --</option>
+                                        {provincias.map(p => (
+                                            <option key={p.id} value={p.id}>{p.nombre}</option>
+                                        ))}
+                                    </select>
+                                </label>
 
-                        <label>
-                            Municipio:
-                            <input type="text" value={userData.municipioNombre} disabled />
-                            <input type="hidden" name="municipio" value={userData.municipioId} />
-                        </label>
+                                <label>
+                                    Municipio:
+                                    <select
+                                        name="municipio"
+                                        value={form.municipio}
+                                        onChange={handleChange}
+                                        required
+                                        disabled={!form.provincia}
+                                    >
+                                        <option value="">-- Selecciona un municipio --</option>
+                                        {municipios.map(m => (
+                                            <option key={m.id} value={m.id}>{m.nombre}</option>
+                                        ))}
+                                    </select>
+                                </label>
 
-                        <label>
-                            Recinto:
-                            <input type="text" value={userData.recintoNombre} disabled />
-                            <input type="hidden" name="recinto" value={userData.recintoId} />
-                        </label>
+                                <label>
+                                    Recinto:
+                                    <select
+                                        name="recinto"
+                                        value={form.recinto}
+                                        onChange={handleChange}
+                                        required
+                                        disabled={!form.municipio}
+                                    >
+                                        <option value="">-- Selecciona un recinto --</option>
+                                        {recintos.map(r => (
+                                            <option key={r.id} value={r.id}>{r.nombre}</option>
+                                        ))}
+                                    </select>
+                                </label>
 
-                        {/* Número de Mesa */}
-                        <label>
-                            Número de Mesa:
-                            <select
-                                name="nroMesa"
-                                value={form.nroMesa}
-                                onChange={handleChange}
-                                required
-                            >
-                                <option value="">-- Selecciona una mesa --</option>
-                                {mesasDisponibles.map(mesa => (
-                                    <option key={mesa.id} value={mesa.codigo}>
-                                        Mesa {mesa.codigo}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
+                                <label>
+                                    Número de Mesa:
+                                    <select
+                                        name="nroMesa"
+                                        value={form.nroMesa}
+                                        onChange={handleChange}
+                                        required
+                                        disabled={!form.recinto}
+                                    >
+                                        <option value="">-- Selecciona una mesa --</option>
+                                        {mesasDisponibles.map(mesa => (
+                                            <option key={mesa.id} value={mesa.codigo}>
+                                                Mesa {mesa.codigo}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            </>
+                        ) : (
+                            // Para operador: campos fijos, sin editar
+                            <>
+                                <label>
+                                    Departamento:
+                                    <input type="text" value={userData.departamentoNombre} disabled />
+                                    <input type="hidden" name="departamento" value={userData.departamentoId} />
+                                </label>
+
+                                <label>
+                                    Circunscripción:
+                                    <input type="text" value={userData.circunscripcionNombre} disabled />
+                                    <input type="hidden" name="circunscripcion" value={userData.circunscripcionId} />
+                                </label>
+
+                                <label>
+                                    Provincia:
+                                    <input type="text" value={userData.provinciaNombre} disabled />
+                                    <input type="hidden" name="provincia" value={userData.provinciaId} />
+                                </label>
+
+                                <label>
+                                    Municipio:
+                                    <input type="text" value={userData.municipioNombre} disabled />
+                                    <input type="hidden" name="municipio" value={userData.municipioId} />
+                                </label>
+
+                                <label>
+                                    Recinto:
+                                    <input type="text" value={userData.recintoNombre} disabled />
+                                    <input type="hidden" name="recinto" value={userData.recintoId} />
+                                </label>
+
+                                <label>
+                                    Número de Mesa:
+                                    <select
+                                        name="nroMesa"
+                                        value={form.nroMesa}
+                                        onChange={handleChange}
+                                        required
+                                    >
+                                        <option value="">-- Selecciona una mesa --</option>
+                                        {mesasDisponibles.map(mesa => (
+                                            <option key={mesa.id} value={mesa.codigo}>
+                                                Mesa {mesa.codigo}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            </>
+                        )}
                     </div>
                 )}
-
 
                 {/* Tabla de votos por partido */}
 
@@ -1018,20 +1223,7 @@ export default function RegistroBoletasPage() {
                                 </tr>
                             ))}
 
-                            {/* Fila de totales */}
-                            <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
-                                <td>Total</td>
-                                <td>
-                                    {
-                                        Object.values(form.votosPresidente).reduce((acc, val) => acc + (parseInt(val) || 0), 0)
-                                    }
-                                </td>
-                                <td>
-                                    {
-                                        Object.values(form.votosDiputado).reduce((acc, val) => acc + (parseInt(val) || 0), 0)
-                                    }
-                                </td>
-                            </tr>
+
                         </tbody>
                     </table>
                 </div>
@@ -1039,29 +1231,65 @@ export default function RegistroBoletasPage() {
 
                 {/* Totales */}
                 <PasoIndicador
-                        numero={4}
-                        texto="Completa los campos adicionales sobre papeletas"
-                        ayuda="Registra la cantidad de papeletas válidas, blancas, nulas, utilizadas y no utilizadas para mantener el control del material electoral."
-                    />
+                    numero={4}
+                    texto="Completa los campos adicionales sobre papeletas"
+                    ayuda="Registra la cantidad de papeletas válidas, blancas, nulas, utilizadas y no utilizadas para mantener el control del material electoral."
+                />
                 <div className={styles.totales}>
-                    
-                    <label>Válidos Presidente: <input name="validosPresidente" type="number" value={form.validosPresidente} onChange={handleChange} required /></label>
-                    <label>Válidos Diputado: <input name="validosDiputado" type="number" value={form.validosDiputado} onChange={handleChange} required /></label>
-                    <label>Blancos Presidente: <input name="blancosPresidente" type="number" value={form.blancosPresidente} onChange={handleChange} required /></label>
-                    <label>Blancos Diputado: <input name="blancosDiputado" type="number" value={form.blancosDiputado} onChange={handleChange} required /></label>
-                    <label>Nulos Presidente: <input name="nulosPresidente" type="number" value={form.nulosPresidente} onChange={handleChange} required /></label>
+                    <label>
+                        Válidos Presidente:
+                        <div style={{ fontWeight: 'bold', padding: '0.4rem 0' }}>
+                            {
+                                Object.values(form.votosPresidente || {}).reduce((acc, val) => acc + (parseInt(val) || 0), 0)
+                            }
+                        </div>
+                    </label>
+                    <label>
+                        Válidos Diputado:
+                        <div style={{ fontWeight: 'bold', padding: '0.4rem 0' }}>
+                            {
+                                Object.values(form.votosDiputado || {}).reduce((acc, val) => acc + (parseInt(val) || 0), 0)
+                            }
+                        </div>
+                    </label>
+                    <label>Blancos Presidente:
+                        <input name="blancosPresidente" type="number" value={form.blancosPresidente} onChange={handleChange} required />
+                    </label>
+                    <label>Blancos Diputado:
+                        <input name="blancosDiputado" type="number" value={form.blancosDiputado} onChange={handleChange} required />
+                    </label>
+                    <label>Nulos Presidente:
+                        <input name="nulosPresidente" type="number" value={form.nulosPresidente} onChange={handleChange} required />
+                    </label>
                     <label>Nulos Diputado:
                         <input name="nulosDiputado" type="number" value={form.nulosDiputado} onChange={handleChange} required />
                     </label>
-                    
-                    <label>Papeletas en ánfora (utilizadas):
+                </div>
+
+                <PasoIndicador
+                    numero={5}
+                    texto="Completa los campos de papeletas en anfora y no utilizadas"
+                    ayuda="suele estar en la columna izquierda del Acta"
+                />
+                <div className={styles.totales}>
+                    <label>Papeletas en ánfora:
                         <input name="papeletasAnfora" type="number" value={form.papeletasAnfora} onChange={handleChange} required />
                     </label>
                     <label>Papeletas no utilizadas:
                         <input name="papeletasNoUtilizadas" type="number" value={form.papeletasNoUtilizadas} onChange={handleChange} required />
                     </label>
+                    <div style={{ marginTop: '2rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input
+                                type="checkbox"
+                                name="estado"
+                                checked={form.estado === 'observado'}
+                                onChange={handleChange}
+                            />
+                            Marcar como <strong>observado</strong>
+                        </label>
+                    </div>
                 </div>
-
                 {/* Botón de envío */}
                 <button
                     type="submit"
