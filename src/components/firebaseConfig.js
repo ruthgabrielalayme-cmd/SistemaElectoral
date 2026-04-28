@@ -3,16 +3,32 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAAN-6JFEEzDv9H_fK9eC4Eh7CJQbZI11Y",
-  authDomain: "control-electoral-libre.firebaseapp.com",
-  projectId: "control-electoral-libre",
-  storageBucket: "control-electoral-libre.firebasestorage.app",
-  messagingSenderId: "593332831012",
-  appId: "1:593332831012:web:67a021420cb8b5efb9a9b1",
-  measurementId: "G-E5GV00BWD8"
-};
+const requiredEnvVars = [
+  "VITE_FIREBASE_API_KEY",
+  "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_STORAGE_BUCKET",
+  "VITE_FIREBASE_MESSAGING_SENDER_ID",
+  "VITE_FIREBASE_APP_ID",
+];
 
+const missingEnvVars = requiredEnvVars.filter((key) => !import.meta.env[key]);
+
+if (missingEnvVars.length > 0) {
+  throw new Error(
+    `Missing Firebase environment variables: ${missingEnvVars.join(", ")}`
+  );
+}
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || undefined,
+};
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

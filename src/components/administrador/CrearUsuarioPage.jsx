@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { auth, db } from '../firebaseConfig';
-import {
-  createUserWithEmailAndPassword,
-  fetchSignInMethodsForEmail,
-} from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail, getAuth } from 'firebase/auth';
+import { auth, db, firebaseConfig } from '../firebaseConfig';
 import {
   collection,
   doc,
@@ -326,4 +324,3 @@ export default function CrearUsuarioPage() {
     </div>
   );
 }
-
