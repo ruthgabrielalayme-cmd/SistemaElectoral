@@ -1,7 +1,10 @@
 import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { faker } from '@faker-js/faker';
+import xlsx from 'xlsx';
+import fs from 'fs';
 
 // Set emulator host environment variables
 process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
@@ -42,132 +45,193 @@ async function seedData() {
         }
     };
 
-    // Seed Departamentos (9)
-    const dptos = [
-      'Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'
+    // --- Seed Demo Users ---
+    console.log('Seeding demo users...');
+    const auth = getAuth(app);
+    const users = [
+      { email: 'admin@demo.com', password: 'password123', rol: 'administrador', nombre: 'Admin Demo' },
+      { email: 'delegado@demo.com', password: 'password123', rol: 'delegado', nombre: 'Delegado Demo' },
+      { email: 'revisor@demo.com', password: 'password123', rol: 'revisor', nombre: 'Revisor Demo' },
+      { email: 'jefe@demo.com', password: 'password123', rol: 'jefeR', nombre: 'Jefe Demo' },
     ];
-    const deptRefs = [];
 
-    console.log('Seeding departamentos...');
-    for (const d of dptos) {
-      const ref = db.collection('departamentos').doc();
-      deptRefs.push(ref);
-      batch.set(ref, {
-        nombre: d,
-        createdAt: new Date().toISOString()
-      });
-      opCount++;
-      await checkBatch();
+    for (const user of users) {
+      try {
+        const userRecord = await auth.createUser({
+          email: user.email,
+          password: user.password,
+          displayName: user.nombre,
+        });
+
+        // Add to 'usuarios' collection
+        const userDocRef = db.collection('usuarios').doc(userRecord.uid);
+        batch.set(userDocRef, {
+          email: user.email,
+          rol: user.rol,
+          nombre: user.nombre,
+          habilitado: true,
+          estado: 'aprobado',
+          createdAt: new Date().toISOString()
+        });
+        opCount++;
+        await checkBatch();
+      } catch (err) {
+        if (err.code !== 'auth/email-already-exists') {
+          console.error(`Failed to create user ${user.email}:`, err);
+        }
+      }
     }
 
-    // Seed Circunscripciones (per departamento)
-    console.log('Seeding circunscripciones...');
-    const circRefs = [];
-    for (const dRef of deptRefs) {
-      for (let i = 0; i < 3; i++) {
+    // --- Seed Data from Excel (if available) ---
+    const excelFilePath = 'datos_iniciales.xlsx';
+    let excelData = [];
+
+    if (fs.existsSync(excelFilePath)) {
+      console.log(`Found ${excelFilePath}. Extracting real data...`);
+      const workbook = xlsx.readFile(excelFilePath);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = xlsx.utils.sheet_to_json(sheet);
+
+      excelData = json.map((row) => {
+        const cleanRow = {};
+        for (const key in row) {
+          cleanRow[key.trim()] = row[key];
+        }
+        return cleanRow;
+      });
+    } else {
+      console.log('No Excel file found. Generating some mock hierarchical data...');
+      // Fallback data generation if Excel is missing (so it doesn't fail completely)
+      excelData = [
+        { dep: '1', Departamento: 'Chuquisaca', prov: '1', Provincia: 'Oropeza', Municipio: 'Sucre', reci: '1', Recinto: 'Col. Junin', 'Numero de Mesa': 1, Habilitados: 200 },
+        { dep: '1', Departamento: 'Chuquisaca', prov: '1', Provincia: 'Oropeza', Municipio: 'Sucre', reci: '1', Recinto: 'Col. Junin', 'Numero de Mesa': 2, Habilitados: 200 }
+      ];
+    }
+
+    console.log(`Processing ${excelData.length} records into hierarchy...`);
+
+    // Caches to avoid duplicates
+    const cache = {
+      departamentos: new Map(),
+      circunscripciones: new Map(),
+      provincias: new Map(),
+      municipios: new Map(),
+      recintos: new Map(),
+      mesas: new Set(),
+    };
+
+    // Process Excel rows just like TestUploadExcelv2.jsx
+    for (const row of excelData) {
+      const depCod = row['dep'] ? String(row['dep']).trim() : '';
+      const depNom = row['Departamento']?.trim() || '';
+      const tipoCircuns = row['Cincun'] ? String(row['Cincun']).trim() : '';
+      const provCod = row['prov'] ? String(row['prov']).trim() : '';
+      const provNom = row['Provincia']?.trim() || '';
+      const muniNom = row['Municipio']?.trim() || '';
+      const distCod = row['dist'] ? String(row['dist']).trim() : '';
+      const distNom = row['Distrito']?.trim() || '';
+      const zonaCod = row['zon'] ? String(row['zon']).trim() : '';
+      const zonaNom = row['Zona']?.trim() || '';
+      const recCod = row['reci'] ? String(row['reci']).trim() : '';
+      const recNom = row['Recinto']?.trim() || '';
+      const nroMesa = row['Numero de Mesa'] ? String(row['Numero de Mesa']).trim() : '';
+      const codMesa = row['mesa'] ? String(row['mesa']).trim() : '';
+      const habilitados = Number(row['Habilitados']) || 0;
+      const inhabilitados = Number(row['Inhabilitados']) || 0;
+
+      if (!depCod || !depNom || !provCod || !provNom || !muniNom || !recNom || !nroMesa) continue;
+
+      // 1. Departamento
+      let depId = cache.departamentos.get(depCod);
+      if (!depId) {
+        const ref = db.collection('departamentos').doc();
+        batch.set(ref, { nombre: depNom, codigo: depCod, estado: 'activo' });
+        depId = ref.id;
+        cache.departamentos.set(depCod, depId);
+        opCount++; await checkBatch();
+      }
+
+      // 2. Circunscripción
+      let circId = cache.circunscripciones.get(`${tipoCircuns}-${depId}`);
+      if (!circId && tipoCircuns) {
         const ref = db.collection('circunscripciones').doc();
-        circRefs.push(ref);
-        batch.set(ref, {
-          idDepartamento: dRef.id,
-          nombre: `Circunscripción ${faker.number.int({min: 1, max: 100})}`,
-          createdAt: new Date().toISOString()
-        });
-        opCount++;
-        await checkBatch();
+        batch.set(ref, { nombre: tipoCircuns, idDepartamento: depId, estado: 'activo' });
+        circId = ref.id;
+        cache.circunscripciones.set(`${tipoCircuns}-${depId}`, circId);
+        opCount++; await checkBatch();
       }
-    }
 
-    // Seed Provincias (per circunscripcion)
-    console.log('Seeding provincias...');
-    const provRefs = [];
-    for (const cRef of circRefs) {
-      for (let i = 0; i < 2; i++) {
+      // 3. Provincia
+      let provId = cache.provincias.get(`${provCod}-${circId}`);
+      if (!provId) {
         const ref = db.collection('provincias').doc();
-        provRefs.push(ref);
-        batch.set(ref, {
-          idCircunscripcion: cRef.id,
-          nombre: `Provincia ${faker.location.city()}`,
-          createdAt: new Date().toISOString()
-        });
-        opCount++;
-        await checkBatch();
+        batch.set(ref, { nombre: provNom, codigo: provCod, idCircunscripcion: circId, estado: 'activo' });
+        provId = ref.id;
+        cache.provincias.set(`${provCod}-${circId}`, provId);
+        opCount++; await checkBatch();
       }
-    }
 
-    // Seed Municipios (per provincia)
-    console.log('Seeding municipios...');
-    const munRefs = [];
-    for (const pRef of provRefs) {
-      for (let i = 0; i < 2; i++) {
+      // 4. Municipio
+      let muniId = cache.municipios.get(`${muniNom}-${provId}`);
+      if (!muniId) {
         const ref = db.collection('municipios').doc();
-        munRefs.push(ref);
-        batch.set(ref, {
-          idProvincia: pRef.id,
-          nombre: `Municipio ${faker.location.city()}`,
-          createdAt: new Date().toISOString()
-        });
-        opCount++;
-        await checkBatch();
+        batch.set(ref, { nombre: muniNom, idProvincia: provId, estado: 'activo' });
+        muniId = ref.id;
+        cache.municipios.set(`${muniNom}-${provId}`, muniId);
+        opCount++; await checkBatch();
       }
-    }
 
-    // Seed Recintos (per municipio)
-    console.log('Seeding recintos...');
-    const recRefs = [];
-    for (const mRef of munRefs) {
-      for (let i = 0; i < 3; i++) {
+      // 5. Recinto
+      let recintoId = cache.recintos.get(`${recCod}-${muniId}`);
+      if (!recintoId) {
         const ref = db.collection('recintos').doc();
-        recRefs.push(ref);
         batch.set(ref, {
-          idMunicipio: mRef.id,
-          nombre: `Colegio ${faker.person.lastName()}`,
+          nombre: recNom,
+          codigo: recCod,
+          idMunicipio: muniId,
           estado: 'activo',
-          createdAt: new Date().toISOString()
+          distritoNombre: distNom,
+          distritoCodigo: distCod,
+          zonaNombre: zonaNom,
+          zonaCodigo: zonaCod,
         });
-        opCount++;
-        await checkBatch();
+        recintoId = ref.id;
+        cache.recintos.set(`${recCod}-${muniId}`, recintoId);
+        opCount++; await checkBatch();
       }
-    }
 
-    // Seed Mesas (per recinto)
-    console.log('Seeding mesas...');
-    const mesaRefs = [];
-    for (const rRef of recRefs) {
-      for (let i = 0; i < 4; i++) {
+      // 6. Mesa
+      const mesaKey = `${nroMesa}-${recintoId}`;
+      if (!cache.mesas.has(mesaKey)) {
         const ref = db.collection('mesas').doc();
-        mesaRefs.push(ref);
         batch.set(ref, {
-          idRecinto: rRef.id,
-          numero: faker.number.int({min: 1, max: 20}),
-          createdAt: new Date().toISOString()
+          numeroMesa: nroMesa,
+          codigo: codMesa || null,
+          habilitados: Number(habilitados),
+          inhabilitados: Number(inhabilitados),
+          idRecinto: recintoId,
+          estado: 'activo',
         });
-        opCount++;
-        await checkBatch();
+        cache.mesas.add(mesaKey);
+        opCount++; await checkBatch();
+
+        // Randomly seed some Recepcion records to show data in dashboard
+        if (Math.random() > 0.5) {
+          const estados = ['pendiente', 'aprobado', 'rechazado'];
+          const recRef = db.collection('recepcion').doc();
+          batch.set(recRef, {
+            idMesa: ref.id,
+            nroMesa: nroMesa,
+            recinto: recintoId,
+            estado: estados[Math.floor(Math.random() * estados.length)],
+            votosPresidente: faker.number.int({min: 0, max: 200}),
+            votosUninominal: faker.number.int({min: 0, max: 200}),
+            votosPlurinominal: faker.number.int({min: 0, max: 200}),
+            createdAt: new Date().toISOString()
+          });
+          opCount++; await checkBatch();
+        }
       }
-    }
-
-    // Seed Recepcion (Randomly for mesas) - Target around 100-200
-    console.log('Seeding recepcion...');
-    const estados = ['pendiente', 'aprobado', 'rechazado'];
-    let recepcionesCount = 0;
-
-    for (const mRef of mesaRefs) {
-      if (recepcionesCount > 150) break; // limit to ~150 to stay under 1000 items total easily
-
-      const ref = db.collection('recepcion').doc();
-      batch.set(ref, {
-        idMesa: mRef.id,
-        nroMesa: faker.number.int({min: 1, max: 20}),
-        recinto: faker.database.mongodbObjectId(), // dummy id
-        estado: estados[Math.floor(Math.random() * estados.length)],
-        votosPresidente: faker.number.int({min: 0, max: 200}),
-        votosUninominal: faker.number.int({min: 0, max: 200}),
-        votosPlurinominal: faker.number.int({min: 0, max: 200}),
-        createdAt: new Date().toISOString()
-      });
-      recepcionesCount++;
-      opCount++;
-      await checkBatch();
     }
 
     if (opCount > 0) {
