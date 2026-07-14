@@ -13,11 +13,11 @@ El sistema genera automáticamente estos 4 usuarios (su contraseña es `password
 
 ## Cargar tus Propios Datos Excel (Jerarquía)
 
-El script toma automáticamente la información jerárquica de `TestUploadExcelv2` si le pasas un archivo Excel.
+El script lee automáticamente la información jerárquica de cualquier archivo Excel (.xlsx) que se encuentre en la carpeta `seeder_data/`.
 
-1. Simplemente renombra tu archivo Excel como **`datos_iniciales.xlsx`**.
-2. Pon el archivo `datos_iniciales.xlsx` en la **raíz del proyecto** (la misma carpeta donde está el `package.json`).
+1. Crea una carpeta llamada `seeder_data/` en la raíz del proyecto (si no existe).
+2. Coloca todos tus archivos Excel (.xlsx) dentro de esta carpeta.
 3. Levanta el proyecto con `docker-compose up`.
-4. El script leerá el Excel automáticamente usando las mismas reglas que tu pantalla de `TestUploadExcelv2` (las mismas columnas) y llenará los emuladores locales sin que tengas que entrar a la página web y subirlos uno por uno.
+4. El script iterará por todos los archivos Excel automáticamente y extraerá la información jerárquica (departamentos, provincias, municipios, recintos, mesas) al igual que las ubicaciones (LAT, LON). Adicionalmente generará registros ficticios de recepción de votos para habilitar los reportes visuales.
 
-*Si en el futuro reinicias Docker, los datos se conservarán. Si quieres forzar una recarga limpia, simplemente borra la carpeta `firebase-data/` y vuelve a subir los contenedores.*
+*Si en el futuro reinicias Docker, los datos se conservarán en un volumen persistente de Docker. Si quieres forzar una recarga limpia desde cero, ejecuta `docker-compose down -v` para borrar el volumen de base de datos antes de volver a levantar los contenedores.*

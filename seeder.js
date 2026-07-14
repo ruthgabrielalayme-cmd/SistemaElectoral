@@ -5,6 +5,7 @@ import { getStorage } from 'firebase-admin/storage';
 import { faker } from '@faker-js/faker';
 import xlsx from 'xlsx';
 import fs from 'fs';
+import path from 'path';
 
 // Set emulator host environment variables
 process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
@@ -52,7 +53,7 @@ async function seedData() {
       { email: 'admin@demo.com', password: 'password123', rol: 'administrador', nombre: 'Admin Demo' },
       { email: 'delegado@demo.com', password: 'password123', rol: 'delegado', nombre: 'Delegado Demo' },
       { email: 'revisor@demo.com', password: 'password123', rol: 'revisor', nombre: 'Revisor Demo' },
-      { email: 'jefe@demo.com', password: 'password123', rol: 'jefeR', nombre: 'Jefe Demo' },
+      { email: 'jefe@demo.com', password: 'password123', rol: 'jefe_recinto', nombre: 'Jefe Demo' },
     ];
 
     for (const user of users) {
@@ -83,28 +84,43 @@ async function seedData() {
     }
 
     // --- Seed Data from Excel (if available) ---
-    const excelFilePath = 'datos_iniciales.xlsx';
+    const excelDir = path.join(process.cwd(), 'seeder_data');
     let excelData = [];
 
-    if (fs.existsSync(excelFilePath)) {
-      console.log(`Found ${excelFilePath}. Extracting real data...`);
-      const workbook = xlsx.readFile(excelFilePath);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = xlsx.utils.sheet_to_json(sheet);
+    if (fs.existsSync(excelDir)) {
+      const files = fs.readdirSync(excelDir).filter(file => file.endsWith('.xlsx'));
 
-      excelData = json.map((row) => {
-        const cleanRow = {};
-        for (const key in row) {
-          cleanRow[key.trim()] = row[key];
+      if (files.length > 0) {
+        console.log(`Found ${files.length} Excel files in ${excelDir}. Extracting real data...`);
+
+        for (const file of files) {
+          const excelFilePath = path.join(excelDir, file);
+          console.log(`Processing file: ${file}`);
+          const workbook = xlsx.readFile(excelFilePath);
+
+          for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName];
+            const json = xlsx.utils.sheet_to_json(sheet);
+
+            const processedJson = json.map((row) => {
+              const cleanRow = {};
+              for (const key in row) {
+                cleanRow[key.trim()] = row[key];
+              }
+              return cleanRow;
+            });
+            excelData = excelData.concat(processedJson);
+          }
         }
-        return cleanRow;
-      });
-    } else {
-      console.log('No Excel file found. Generating some mock hierarchical data...');
+      }
+    }
+
+    if (excelData.length === 0) {
+      console.log('No Excel files found in seeder_data directory. Generating some mock hierarchical data...');
       // Fallback data generation if Excel is missing (so it doesn't fail completely)
       excelData = [
-        { dep: '1', Departamento: 'Chuquisaca', prov: '1', Provincia: 'Oropeza', Municipio: 'Sucre', reci: '1', Recinto: 'Col. Junin', 'Numero de Mesa': 1, Habilitados: 200 },
-        { dep: '1', Departamento: 'Chuquisaca', prov: '1', Provincia: 'Oropeza', Municipio: 'Sucre', reci: '1', Recinto: 'Col. Junin', 'Numero de Mesa': 2, Habilitados: 200 }
+        { dep: '1', Departamento: 'Chuquisaca', prov: '1', Provincia: 'Oropeza', Municipio: 'Sucre', reci: '1', Recinto: 'Col. Junin', 'Numero de Mesa': 1, Habilitados: 200, LAT: -19.03332, LON: -65.26274 },
+        { dep: '1', Departamento: 'Chuquisaca', prov: '1', Provincia: 'Oropeza', Municipio: 'Sucre', reci: '1', Recinto: 'Col. Junin', 'Numero de Mesa': 2, Habilitados: 200, LAT: -19.03332, LON: -65.26274 }
       ];
     }
 
@@ -138,6 +154,8 @@ async function seedData() {
       const codMesa = row['mesa'] ? String(row['mesa']).trim() : '';
       const habilitados = Number(row['Habilitados']) || 0;
       const inhabilitados = Number(row['Inhabilitados']) || 0;
+      const lat = row['LAT'] ? Number(row['LAT']) : null;
+      const lon = row['LON'] ? Number(row['LON']) : null;
 
       if (!depCod || !depNom || !provCod || !provNom || !muniNom || !recNom || !nroMesa) continue;
 
@@ -194,6 +212,8 @@ async function seedData() {
           distritoCodigo: distCod,
           zonaNombre: zonaNom,
           zonaCodigo: zonaCod,
+          latitud: lat,
+          longitud: lon,
         });
         recintoId = ref.id;
         cache.recintos.set(`${recCod}-${muniId}`, recintoId);

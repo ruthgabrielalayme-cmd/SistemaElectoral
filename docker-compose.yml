@@ -42,6 +42,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+      - ./seeder_data:/app/seeder_data
 
 volumes:
   firebase_data:
