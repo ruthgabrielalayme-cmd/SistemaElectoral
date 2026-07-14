@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_USE_FIREBASE_EMULATOR=true
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - firebase
+
+  firebase:
+    build:
+      context: .
+      dockerfile: Dockerfile.firebase
+    ports:
+      - "9099:9099" # Auth
+      - "8080:8080" # Firestore
+      - "9199:9199" # Storage
+      - "4000:4000" # UI
+    volumes:
+      - firebase_data:/app/firebase-data
+      - ./firebase.json:/app/firebase.json
+
+  seeder:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    command: ["node", "seeder.js"]
+    environment:
+      - FIRESTORE_EMULATOR_HOST=firebase:8080
+      - FIREBASE_AUTH_EMULATOR_HOST=firebase:9099
+      - FIREBASE_STORAGE_EMULATOR_HOST=firebase:9199
+    depends_on:
+      - firebase
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+volumes:
+  firebase_data:
