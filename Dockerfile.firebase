@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+# Install Java (required for Firebase Emulators)
+RUN apk add --no-cache openjdk11-jre-headless bash
+
+# Install Firebase CLI
+RUN npm install -g firebase-tools
+
+WORKDIR /app
+
+# Copy Firebase config files
+COPY firebase.json .
+COPY .firebaserc .
+
+# Expose Emulator Ports (Auth, Firestore, Storage, UI)
+EXPOSE 9099 8080 9199 4000
+
+# Run the emulators, exporting data on exit and importing if it exists
+CMD ["firebase", "emulators:start", "--project", "demo-monitoreo-electoral", "--import=./firebase-data", "--export-on-exit=./firebase-data"]

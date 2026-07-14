@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getStorage, connectStorageEmulator } from "firebase/storage";
 
 const requiredEnvVars = [
   "VITE_FIREBASE_API_KEY",
@@ -34,5 +34,14 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+
+if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
+  // Configured to connect to the emulators using the hostname of the page
+  // This helps when running via Docker or another local IP instead of localhost
+  const host = window.location.hostname || "localhost";
+  connectAuthEmulator(auth, `http://${host}:9099`);
+  connectFirestoreEmulator(db, host, 8080);
+  connectStorageEmulator(storage, host, 9199);
+}
 
 export { app, auth, db, storage, firebaseConfig };
